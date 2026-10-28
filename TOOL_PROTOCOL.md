@@ -1,26 +1,26 @@
-# Формат ответа моделей в тестах (решение владельца 28.10.2026)
+# Answer format in the tests (decision 2026-10-28)
 
-«Где JSON оправдан — оставляем, где нет — перерабатываем задания.»
+"Keep JSON where it is justified; rework the tasks where it is not."
 
-Повод: gpt-oss в Medium отвечал встроенными вызовами инструментов (`repo_browser.list_files`) с пустым текстом —
-32 хода «JSONDecodeError», до задачи не дошёл; принудительный `format=json` это не меняет. K2 раньше спотыкался о
-«Reply must be one JSON object». Тест мерил «держит ли модель наш формат» вперемешку с «решает ли задачу», и не
-совпадал с тем, как модели используются на деле (OpenCode — встроенные инструменты).
+Why: in Medium, gpt-oss answered with native tool calls (`repo_browser.list_files`) and empty text — 32 turns of
+"JSONDecodeError", it never reached the task; forcing `format=json` did not change that. K2 used to trip on "Reply
+must be one JSON object". The test was measuring "does the model keep our format" mixed with "does it solve the
+task", and did not match how models are used in practice (OpenCode uses native tools).
 
-## JSON оправдан — оставляем
-| тест | почему |
+## JSON is justified — kept
+| test | why |
 |---|---|
-| SuperLight (S1–S6) | ответ в JSON — это и есть задача (короткие структурированные ответы, как на сайте) |
-| Сайт: извлечение фактов, план, оценки | нужен машиночитаемый ответ; теперь это короткие коды (`resume_codes.py`) |
+| SuperLight (S1–S6) | the JSON answer is the task itself (short structured answers) |
+| Site pipeline: fact extraction, plan, assessments | a machine-readable answer is needed; now short codes decoded by a parser |
 
-## JSON не оправдан — перерабатываем на встроенные инструменты Ollama
-| тест | статус |
+## JSON is not justified — moved to Ollama native tools
+| test | status |
 |---|---|
-| Light / Medium / High (`run_light.py` через `zoo_night.py`) | **сделано**: `tool_mode: "native"` в конфиге прогона — действия передаются как инструменты Ollama, результаты возвращаются сообщениями `tool`. По умолчанию `json` (старые прогоны сравнимы). |
-| Все агентные тесты, оба режима | **сделано**: встроенный вызов инструмента всегда принимается и переводится в наш ход; ошибки формата считаются отдельно (`format_errors`, `native_tool_calls` в episode.json) |
-| C++ (`cpp_bench/cpp_bench.py`, свой цикл, `format=json`) | **осталось** перевести на тот же режим |
-| Мастермайнд A–E | обвязку делать сразу на встроенных инструментах |
+| Light / Medium / High (`run_light.py` via `zoo_night.py`) | **done**: `tool_mode: "native"` — actions are Ollama tools, results come back as `tool` messages. Default stays `json` so old runs remain comparable. |
+| All agent tests, both modes | **done**: a native tool call is always accepted and turned into our action; format errors are counted separately (`format_errors`, `native_tool_calls` in episode.json) |
+| C++ (`cpp_bench/cpp_bench.py`, own loop, `format=json`) | **to do**: move to the same mode |
+| Mastermind A–E | harness built on native tools from the start |
 
-## Что это значит для старых результатов
-Провалы из-за формата — не провалы задачи. Переиграть в режиме `native`: gpt-oss (Medium/High), K2 (эпизоды с
-ошибками формата), затем остальных по желанию владельца. Тесты обвязки: `test_light_runner.py` (10 тестов, OK).
+## What this means for old results
+Failures caused by the format are not task failures. Re-run in `native` mode: gpt-oss (Medium/High), K2 (episodes
+with format errors), the rest on request. Harness tests: `test_light_runner.py`.

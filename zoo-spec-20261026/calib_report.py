@@ -6,7 +6,7 @@ character-count estimate used before 2026-10-28 is gone (GPT review: JSON escapi
 Per model: max input, max reply, peak (input + reply of one request), replies cut by the cap, coverage.
 
 Rule (user 2026-10-28; joint ctx/reply choice after the GPT review):
-- coverage first: fewer complete episodes than planned, or infra errors -> "недостаточно данных", budget unchanged;
+- coverage first: fewer complete episodes than planned, or infra errors -> "not enough data", budget unchanged;
 - reply cap: any reply cut -> cap x1.5; else cap = max reply x1.3 rounded up to 2K, never under 4K and never
   under the longest reply seen;
 - context: a cut or peak > 80% -> raise x1.5; peak < 40% -> cut to peak x1.5; always >= max input + new reply cap,
@@ -89,18 +89,18 @@ def main():
         fill = m["peak"] / m["num_ctx"] if m["num_ctx"] else 0
         model_key = key[0]
         if not m["num_ctx"] or not m["num_predict"]:
-            ctx, predict, verdict, status = m["num_ctx"], m["num_predict"], "бюджет не задан явно (тег?): пропуск", "unchanged"
+            ctx, predict, verdict, status = m["num_ctx"], m["num_predict"], "budget not set explicitly (tag?): skipped", "unchanged"
         elif m["episodes"] < a.expect or m["infra"]:
-            ctx, predict, verdict, status = m["num_ctx"], m["num_predict"], "недостаточно данных: бюджет не меняю", "unchanged"
+            ctx, predict, verdict, status = m["num_ctx"], m["num_predict"], "not enough data: budget unchanged", "unchanged"
         else:
             predict = (up(m["num_predict"] * 1.5, 2048) if m["cut"]
                        else max(4096, up(m["max_reply"] * 1.3, 2048), m["max_reply"]))
             if m["cut"] or fill > 0.8:
-                ctx, verdict = m["num_ctx"] * 1.5, "мало -> поднять"
+                ctx, verdict = m["num_ctx"] * 1.5, "too small -> raise"
             elif fill < 0.4:
-                ctx, verdict = m["peak"] * 1.5, "много -> урезать"
+                ctx, verdict = m["peak"] * 1.5, "too large -> cut"
             else:
-                ctx, verdict = m["num_ctx"], "в норме"
+                ctx, verdict = m["num_ctx"], "ok"
             ctx = max(8192, up(max(ctx, m["max_input"] + predict), 4096))
             status = "validated" if (not m["cut"] and fill <= 0.8 and ctx == m["num_ctx"]
                                      and predict == m["num_predict"]) else "proposed"

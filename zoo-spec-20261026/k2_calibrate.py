@@ -1,5 +1,5 @@
 """K2 Q5 calibration by Astra's map (outputs/k2-two-role-test-map-20261028, plan: ../K2_CALIBRATION_PLAN.md).
-Hard time limits (owner 2026-10-28: "не даём ему 10 лет думать"): Medium episode 240 s, High 720 s; hitting the
+Hard time limits (owner 2026-10-28: "do not let it think for ten years"): Medium episode 240 s, High 720 s; hitting the
 limit is a model outcome (time_limit), never a retry. Fixed: T1.0, top_p 0.95, no `think` key (template default).
 
   python k2_calibrate.py --stage speed      # 4 contexts x 256 tokens, <= 12 min, no quality score

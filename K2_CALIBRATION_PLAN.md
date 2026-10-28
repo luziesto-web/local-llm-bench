@@ -1,34 +1,24 @@
-# K2 Q5 — план калибровки (по карте Астры, 28.10.2026)
+# K2 Q5 — calibration plan (run 2026-10-28)
 
-Источник: `<local-folder>` (README.md + matrix.json).
-Статус: запланировано, не запущено. K2 снят с конкурса High до итогов этой калибровки.
+Fixed: tag `hf.co/bartowski/K2-Horizon-7B-GGUF:Q5_K_M`, T1.0, top_p 0.95, no `think` key (template default), q8 KV
+cache and flash attention verified and left unchanged, one generation at a time, no automatic context growth.
 
-## Что фиксируем
-Тег `hf.co/bartowski/K2-Horizon-7B-GGUF:Q5_K_M`, T1.0, top_p 0.95, ключ `think` НЕ отправляется (шаблон по умолчанию),
-q8 KV и flash attention — проверить, не менять; одна генерация за раз; без авторасширения контекста и рестартов Ollama.
-
-## Стадии (машинное время ≤ 3–3.75 ч)
-| Стадия | Что | Предел |
+## Stages (≤ 3–3.75 h of machine time)
+| Stage | What | Limit |
 |---|---|---|
-| 0. Стенд (без модели) | эталоны и мутанты M1–M5, H2–H5, H8 (`selfcheck.py`); жёсткий предел эпизода на mock (зависший API и подпроцесс); нет генерации после таймаута; resume на синтетике (успех, таймаут, 500, битая строка, падение) | работа исполнителя |
-| 1. Скорость | контексты 8K/12K/16K/24K, сид 11, ответ 256 токенов, холодная загрузка, ток/с, размещение VRAM | 12 мин на всю стадию |
-| 2. Medium отбор | M-C8-P4, M-C12-P4, M-C16-P4, M-C12-P2 × M2, M5, сид 11 | 240 с на эпизод |
-| 3. Medium подтверждение | один финалист × M1, M3, M4 × сиды 22, 33 | 240 с |
-| 4. High отбор | H-C12-P8, H-C16-P8, H-C24-P8, H-C16-P4 × H2, H3, сид 11 | 720 с |
-| 5. High подтверждение | один финалист × H4, H8, H5 × сид 22 | 720 с |
-| 6. Отчёт | допуск: Medium — 2 успеха в отборе и ≥5 в подтверждении; High — 2 в отборе, обязательно H4 и H8; H5 не решён → метка «limited_high_H5» | — |
+| 0. Rig (no model) | references and mutants pass/fail as expected; hard episode deadline; nothing keeps generating after a time-out; safe resume | — |
+| 1. Speed | contexts 8K/12K/16K/24K, seed 11, 256-token reply, load time, tokens/s, VRAM placement | 12 min for the stage |
+| 2. Medium screen | M-C8-P4, M-C12-P4, M-C16-P4, M-C12-P2 × M2, M5, seed 11 | 240 s per episode |
+| 3. Medium confirm | one finalist × M1, M3, M4 × seeds 22, 33 | 240 s |
+| 4. High screen | H-C12-P8, H-C16-P8, H-C24-P8, H-C16-P4 × H2, H3, seed 11 | 720 s |
+| 5. High confirm | one finalist × H4, H8, H5 × seed 22 | 720 s |
+| 6. Report | admission: Medium — 2/2 in the screen and ≥5/6 in the confirm; High — 2/2 in the screen, H4 and H8 mandatory; H5 unsolved → label "limited High (H5)" | — |
 
-Выбор финалиста: больше строгих успехов → меньше суммарного времени → меньше ошибок протокола → id конфига.
-Без повторов при таймауте, провале кода, ошибке разбора, обрезке, OOM; транспортный повтор не более 1 раза и в
-пределах дедлайна эпизода; 2 сбоя инфраструктуры подряд → пауза.
+Finalist: most strict successes → least total time → fewest protocol errors → config id.
+No retries on time-out, code failure, parser failure, output cap or OOM; at most one transport retry within the
+episode deadline; 2 infrastructure failures in a row → pause.
 
-## Что уже готово у нас
-- предел эпизода и остаток времени на запрос (`run_light`: timeout запроса = остаток; High 720 с), `time_limit` —
-  исход модели, не инфраструктуры; текст ошибок 500 сохраняется;
-- проверки v2 (H2/H5/H8/H9/M3) и M4 по журналу команд; resume и защита от призраков в `zoo_night`.
-
-## Что сделать перед запуском
-1. Medium-предел 240 с для K2 (сейчас Medium 900 с — нужен параметр на прогон, не глобально).
-2. Mock-проверки стадии 0 и dry-run плана.
-3. Скрипт `k2_calibrate.py` (стадии 1–6, resume, отчёт по правилам допуска) + алиас в дашборде.
-4. Запуск только по разрешению владельца; после — решение о возвращении K2 в конкурс.
+## Result
+Medium 8K/4K (screen 2/2, confirm 5/6); High 12K/8K (screen 2/2, H4 and H8 solved, H5 not → limited High).
+Smaller contexts won: more of the model stays on the GPU (≈26 vs 17 tokens/s at 24K). One blocked attempt to write an
+extra test file in H8; admitted by the owner.
