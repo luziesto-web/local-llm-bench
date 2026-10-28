@@ -1,0 +1,86 @@
+{
+  "gpt-oss-20b": {
+    "config": "high-c32k-p16k",
+    "num_ctx": 32768,
+    "num_predict": 16384,
+    "status": "unchanged",
+    "measured": {
+      "max_input": 5982,
+      "max_reply": 3241,
+      "peak": 7911,
+      "cut": 0,
+      "episodes": 3,
+      "infra": 3
+    }
+  },
+  "qwen3-coder-30b": {
+    "config": "vendor-c32k-p16k",
+    "num_ctx": 16384,
+    "num_predict": 4096,
+    "status": "proposed",
+    "measured": {
+      "max_input": 8390,
+      "max_reply": 1425,
+      "peak": 8561,
+      "cut": 0,
+      "episodes": 6,
+      "infra": 0
+    }
+  },
+  "nemotron-3.5-lightning-30b": {
+    "config": "vendor-th-c32k-p16k",
+    "num_ctx": 36864,
+    "num_predict": 20480,
+    "status": "proposed",
+    "measured": {
+      "max_input": 13708,
+      "max_reply": 14718,
+      "peak": 16663,
+      "cut": 0,
+      "episodes": 6,
+      "infra": 0
+    }
+  },
+  "glm-4.7-flash": {
+    "config": "agent-th-c32k-p16k",
+    "num_ctx": 32768,
+    "num_predict": 16384,
+    "status": "unchanged",
+    "measured": {
+      "max_input": 2401,
+      "max_reply": 988,
+      "peak": 2507,
+      "cut": 0,
+      "episodes": 4,
+      "infra": 2
+    }
+  },
+  "qwen3.5-9b": {
+    "config": "th-coding-c32k-p16k",
+    "num_ctx": 49152,
+    "num_predict": 24576,
+    "status": "proposed",
+    "measured": {
+      "max_input": 14441,
+      "max_reply": 16384,
+      "peak": 21491,
+      "cut": 2,
+      "episodes": 6,
+      "infra": 0
+    }
+  },
+  "k2-horizon-7b-q5": {
+    "config": "q5-template-c32k-p16k",
+    "num_ctx": 32768,
+    "num_predict": 16384,
+    "status": "unchanged",
+    "measured": {
+      "max_input": 8078,
+      "max_reply": 8792,
+      "peak": 10171,
+      "cut": 0,
+      "episodes": 5,
+      "infra": 1
+    }
+  }
+}

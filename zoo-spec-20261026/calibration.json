@@ -1,0 +1,38 @@
+{
+  "qwen3-coder-30b": {
+    "config": null,
+    "num_ctx": 16384,
+    "num_predict": 4096,
+    "status": "validated"
+  },
+  "nemotron-3.5-lightning-30b": {
+    "config": null,
+    "num_ctx": 36864,
+    "num_predict": 20480,
+    "status": "final-check"
+  },
+  "k2-horizon-7b-q5": {
+    "config": null,
+    "num_ctx": 24576,
+    "num_predict": 12288,
+    "status": "hold"
+  },
+  "gpt-oss-20b": {
+    "config": null,
+    "num_ctx": 49152,
+    "num_predict": 24576,
+    "status": "final-check"
+  },
+  "glm-4.7-flash": {
+    "config": null,
+    "num_ctx": 65536,
+    "num_predict": 8192,
+    "status": "final-check"
+  },
+  "qwen3.5-9b": {
+    "config": null,
+    "num_ctx": 110592,
+    "num_predict": 55296,
+    "status": "final-check"
+  }
+}

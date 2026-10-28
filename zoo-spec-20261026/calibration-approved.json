@@ -1,0 +1,43 @@
+{
+  "_note": "Owner-approved High budgets 2026-10-28 (chat): calibration ended after r3 (10/15); High episode limit 12 min (run_light LEVELS high seconds=720). gpt-oss/GLM/Qwen 9B raised per owner, not separately validated.",
+  "qwen3-coder-30b": {
+    "num_ctx": 16384,
+    "num_predict": 4096,
+    "status": "approved",
+    "scope": "validated r2"
+  },
+  "nemotron-3.5-lightning-30b": {
+    "num_ctx": 36864,
+    "num_predict": 20480,
+    "status": "approved",
+    "scope": "r2 in norm, r3 partial"
+  },
+  "gpt-oss-20b": {
+    "num_ctx": 49152,
+    "num_predict": 24576,
+    "status": "approved",
+    "scope": "raised by owner"
+  },
+  "glm-4.7-flash": {
+    "num_ctx": 65536,
+    "num_predict": 8192,
+    "status": "approved",
+    "scope": "raised by owner"
+  },
+  "qwen3.5-9b": {
+    "num_ctx": 110592,
+    "num_predict": 55296,
+    "status": "approved",
+    "scope": "raised x1.5 by owner"
+  },
+  "k2-horizon-7b-q5": {
+    "num_ctx": 12288,
+    "num_predict": 8192,
+    "status": "approved",
+    "scope": "K2 calibration 2026-10-28 (Astra map): High finalist H-C12-P8 2/2, confirm H4+H8 pass, H5 not (limited_high_H5); Medium finalist M-C8-P4 (8K/4K) 2/2 + 5/6; owner admitted despite 2 blocked writes of an extra smoke_e2e.py in H8",
+    "medium": {
+      "num_ctx": 8192,
+      "num_predict": 4096
+    }
+  }
+}
