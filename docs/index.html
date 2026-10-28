@@ -1,34 +1,1688 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local LLM Bench</title><meta name="description" content="Open-weight LLMs on one 8 GB laptop GPU: task ladder, config matrices, hidden checks, daily results."><style>:root{--bg:#fbfaf7;--fg:#1f2328;--muted:#5b636e;--line:#e3e0d8;--accent:#1f6f5c;--head:#f1efe8}
-@media (prefers-color-scheme:dark){:root{--bg:#15181c;--fg:#e6e6e3;--muted:#9aa3ad;--line:#2c3138;--accent:#6cc4a8;--head:#1d2126}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{max-width:980px;margin:0 auto;padding:32px 16px 64px}h1{font-size:30px;line-height:1.2;margin:0 0 8px}
-h2{font-size:21px;margin:40px 0 10px;padding-top:8px;border-top:1px solid var(--line)}p,li{color:var(--fg)}
-a{color:var(--accent)}code{font:14px ui-monospace,Consolas,monospace;background:var(--head);padding:1px 5px;border-radius:4px}
-.tw{overflow-x:auto;margin:12px 0}table{border-collapse:collapse;font-size:14px;min-width:100%}
-th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;white-space:nowrap}th{background:var(--head)}
-td:first-child{font-weight:600}ol li,ul li{margin:6px 0}.foot{color:var(--muted);font-size:14px;margin-top:40px}</style></head><body><main><h1>Local LLM benchmark on a laptop GPU (8 GB)</h1>
-<p>An independent benchmark of open-weight models run locally through Ollama on one consumer laptop: which model and which settings (reasoning mode, temperature, context and reply budget) actually solve small coding tasks, and how long they take.</p>
-<h2>The goal: a local assembly line, not one &quot;best model&quot;</h2>
-<p>On 8 GB of VRAM no single model is both fast and reliable. One big model for every step is too slow; one small model for every step is too unreliable. So the benchmark is built around <strong>roles</strong>: one prompt goes in, a planner breaks it into steps, each step is delegated to the cheapest model that does that kind of step reliably, and a strong model checks the result. The levels below exist to find the right model and settings for each role.</p>
-<div class="tw"><table><thead><tr><th>Role (tag size)</th><th>What it does in the line</th><th>What matters</th><th>Typical size</th></tr></thead><tbody><tr><td><strong>SuperLight</strong> (XS)</td><td>routing, classification, extracting fields, filtering - one shot, strict machine-readable output</td><td>speed, format discipline</td><td>0.8-3B</td></tr><tr><td><strong>Light</strong> (S)</td><td>small code edits: one module, one trap, with tools</td><td>fast and mostly right</td><td>3-4B</td></tr><tr><td><strong>Medium</strong> (M)</td><td>multi-file fixes, recovering when a tool fails, routine executor work</td><td>balance of quality and speed</td><td>7-9B</td></tr><tr><td><strong>High</strong> (L)</td><td>heavy but quality executors: concurrency, permissions, versioned data, bugs from logs; 12-min cap</td><td>correctness first, bounded time</td><td>20-30B (MoE)</td></tr><tr><td><strong>Mastermind</strong> (XL)</td><td>1-2 most reliable models: plan, decompose, delegate, <strong>review and verify</strong> the others&#x27; work</td><td>quality only - time is irrelevant</td><td>largest that runs (CPU offload allowed)</td></tr></tbody></table></div>
-<p>The target line: <strong>one or two reliable Mastermind models</strong> for planning and checking, <strong>heavy but high-quality High executors</strong>, <strong>steady Medium executors</strong>, and <strong>light, fast Light/SuperLight workers</strong> for the many small steps - assembled into one cycle driven by a single prompt with efficient delegation. Between High and Mastermind sits a qualification level that decides who may be trusted with the checker role.</p>
-<h2>The final exam for High models (in preparation)</h2>
-<p>Short coding tasks show who can fix a module. The final exam shows who can <strong>build a whole product</strong>. Every High configuration gets the same brief: build a real, reusable <strong>team collaboration website from scratch</strong> - a Python server with a real database, not a mock-up - in ten consecutive stages, each in a fresh conversation with only a handoff note from its own previous stage. Accounts and sessions, shared workspaces with roles and access boundaries, work items with versioning and conflicting edits, comments, invitations, search and filters, a summary view, an accessible UI and demo data.</p>
-<p>Each model family builds the same product under its own theme, so the sites cannot be copied from each other:</p>
-<div class="tw"><table><thead><tr><th>Family</th><th>Site</th><th>Theme</th></tr></thead><tbody><tr><td>gpt-oss 20B</td><td>Fieldnote</td><td>editorial desk</td></tr><tr><td>Qwen3-Coder 30B</td><td>Launchboard</td><td>product team portal</td></tr><tr><td>Nemotron 3.5 Lightning 30B</td><td>Labbook</td><td>research team journal</td></tr><tr><td>GLM 4.7 Flash</td><td>Craftdesk</td><td>design studio</td></tr><tr><td>Qwen 3.5 9B</td><td>Studyflow</td><td>study group</td></tr><tr><td>K2-Horizon 7B</td><td>Eventroom</td><td>events team</td></tr></tbody></table></div>
-<p>Models work inside an isolated sandbox (one locked-down user per entry, no internet, no access to other entries or to the checker). An independent acceptance suite - not shown to the models - scores each site; a stage that breaks the foundation blocks the stages built on it. The exact tasks and checks stay private until the exam is run.</p>
-<h2>Findings so far</h2>
-<ol><li><strong>Light tasks</strong>: Gemma 4 E4B and Qwen 3.5 4B tie (9/12 correct code) in the config matrix; for every model the vendor settings with reasoning on beat &quot;no reasoning&quot; and a &quot;check yourself&quot; system hint.</li><li><strong>Medium tasks</strong>: K2-Horizon 7B Q5 solved 13/15, Granite 4.2 8B and Qwen 3.5 9B 11/15 - Granite the fastest.</li><li><strong>The harness can be the bug</strong>: forcing JSON-formatted answers failed gpt-oss for reasons unrelated to coding; native tool calls fixed it. JSON is kept only where machine-readable output is the point of the task.</li><li><strong>A 12-minute cap per High episode loses nothing</strong>: every solved High episode finished within ~10 minutes; the failures ran 17-60 minutes. The cap cut 4-5 hours of a 14-hour night.</li><li><strong>gpt-oss &quot;hangs&quot; are reasoning, not stalls</strong>: at high effort it can think for 90+ s about copying a file that low effort writes in 5 s. Ollama&#x27;s HTTP 500 is an intermittent &quot;error parsing tool call&quot;, not memory. The harness was also dropping gpt-oss reasoning between tool calls (fixed).</li><li><strong>Less context can be better on 8 GB</strong>: K2 Q5 did best at 8K (Medium) and 12K (High) - more of the model stays in VRAM (26 vs 17 tokens/s at 24K).</li><li><strong>Check the task before blaming the model</strong>: a High task solved 0/29 times partly because its spec left the lease-expiry boundary open; the spec now states it and the checks report independent groups.</li></ol>
-<h2>Results by model and level</h2>
-<p>All published episodes (every config and seed, so not the best-config score). Solved = hidden checks passed on the files the model wrote; time = wall-clock minutes per episode.</p>
-<div class="tw"><table><thead><tr><th>Model</th><th>Light solved</th><th>Light median min</th><th>Medium solved</th><th>Medium median min</th><th>High solved</th><th>High median min</th></tr></thead><tbody><tr><td>gemma4-e4b</td><td>94/160 (59%)</td><td>0.2</td><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td>qwen3.5-4b</td><td>45/82 (55%)</td><td>0.3</td><td>16/40 (40%)</td><td>0.5</td><td>—</td><td>—</td></tr><tr><td>granite4.2-3b</td><td>64/103 (62%)</td><td>0.5</td><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td>gemma4-e2b</td><td>25/92 (27%)</td><td>0.2</td><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td>granite4.2-8b</td><td>—</td><td>—</td><td>50/88 (57%)</td><td>1.0</td><td>—</td><td>—</td></tr><tr><td>qwen3.5-9b</td><td>—</td><td>—</td><td>35/60 (58%)</td><td>1.5</td><td>16/25 (64%)</td><td>4.7</td></tr><tr><td>k2-horizon-7b-q5</td><td>—</td><td>—</td><td>36/41 (88%)</td><td>2.7</td><td>19/23 (83%)</td><td>2.6</td></tr><tr><td>nemotron-3.5-lightning-30b</td><td>—</td><td>—</td><td>—</td><td>—</td><td>19/28 (68%)</td><td>4.1</td></tr><tr><td>glm-4.7-flash</td><td>—</td><td>—</td><td>—</td><td>—</td><td>14/27 (52%)</td><td>2.1</td></tr><tr><td>gpt-oss-20b</td><td>—</td><td>—</td><td>0/4 (0%)</td><td>1.6</td><td>19/21 (90%)</td><td>4.4</td></tr><tr><td>qwen3-coder-30b</td><td>—</td><td>—</td><td>—</td><td>—</td><td>10/23 (43%)</td><td>2.0</td></tr><tr><td>qwen3.5-0.8b</td><td>3/17 (18%)</td><td>0.2</td><td>—</td><td>—</td><td>—</td><td>—</td></tr><tr><td>k2-horizon-7b-q4</td><td>—</td><td>—</td><td>5/13 (38%)</td><td>0.7</td><td>—</td><td>—</td></tr><tr><td>bonsai-2-9b</td><td>—</td><td>—</td><td>2/5 (40%)</td><td>1.0</td><td>—</td><td>—</td></tr><tr><td>k2-horizon-7b-q8</td><td>—</td><td>—</td><td>4/5 (80%)</td><td>2.2</td><td>—</td><td>—</td></tr><tr><td>devstral-24b</td><td>—</td><td>—</td><td>—</td><td>—</td><td>1/4 (25%)</td><td>23.1</td></tr></tbody></table></div>
-<ul><li><strong>Ladder of task levels</strong>: Light (L0-L11) -&gt; Medium (M1-M5) -&gt; High (H0-H9) -&gt; qualification -&gt; Mastermind;</li></ul>
-<p>  every task has hidden checks run on the files the model wrote (<code>cases.py</code>, <code>light10_cases.py</code>).</p>
-<ul><li><strong>Method</strong>: config matrix per model -&gt; screen -&gt; confirm on more seeds -&gt; contest; context budgets calibrated</li></ul>
-<p>  from measured token use; hard time limits per episode (High: 12 min); a time-out is a model outcome.</p>
-<ul><li><strong>Models so far</strong>: Gemma 4 (E2B/E4B), Qwen 3.5 (4B/9B), Qwen3-Coder 30B, Granite 4.2, gpt-oss 20B,</li></ul>
-<p>  Nemotron 3.5 Lightning 30B, GLM 4.7 Flash, K2-Horizon 7B.</p>
-<ul><li><strong>Results</strong>: <code>runs/&lt;run&gt;/results.jsonl</code> - one line per episode (model, config, options, task, seed, code_pass,</li></ul>
-<p>  time, token use). Full model transcripts are not published.</p>
-<p class="foot"><strong>How this was built</strong>: the code was written by AI coding agents (Claude, ChatGPT/Codex) under my direction; the task ladder, the method, the decisions and the conclusions are mine.</p>
-<p>Updated hourly while runs are active. Last update: 2026-10-28 21:25 UTC.</p><p class="foot">Source and raw results: <a href="https://github.com/luziesto-web/local-llm-bench">github.com/luziesto-web/local-llm-bench</a></p></main></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Local LLM Bench — Dashboard</title>
+<style>
+  :root {
+    --bg: #16181d;
+    --panel: #1b1e24;
+    --panel-2: #20242b;
+    --line: #2c313a;
+    --text: #d6d8dc;
+    --muted: #8b929c;
+    --green: #7aa98c;
+    --green-bg: rgba(122, 169, 140, .10);
+    --yellow: #b3a06e;
+    --yellow-bg: rgba(179, 160, 110, .10);
+    --red: #b57a7e;
+    --red-bg: rgba(181, 122, 126, .10);
+    --blue: #7699b8;
+    --blue-bg: rgba(118, 153, 184, .10);
+    --grey: #858d97;
+    --grey-bg: rgba(133, 141, 151, .08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font: 13px/1.35 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .hidden { display: none !important; }
+  header {
+    padding: 9px 16px 7px;
+    border-bottom: 1px solid var(--line);
+    background: #171a20;
+  }
+  .head-row { display: flex; gap: 18px; align-items: baseline; justify-content: space-between; }
+  h1 { margin: 0; font-size: 16px; font-weight: 600; color: #e0e2e6; white-space: nowrap; }
+  .ollama-line {
+    color: var(--muted);
+    white-space: nowrap;
+    overflow-x: auto;
+    max-width: 72%;
+    padding-bottom: 1px;
+  }
+  .summary {
+    margin-top: 5px;
+    font-size: 14px;
+    color: #e2e4e8;
+    white-space: nowrap;
+    overflow-x: auto;
+    padding-bottom: 1px;
+  }
+  .legend {
+    margin-top: 6px;
+    display: block;
+    color: var(--muted);
+    font-size: 11.5px;
+    line-height: 1.6;
+    white-space: normal;
+    overflow-x: visible;
+  }
+  .legend .sep { color: #454b55; }
+  .head-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px 14px;
+    margin-top: 6px;
+  }
+  .tabs { display: flex; gap: 5px; align-items: center; }
+  .tab {
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: var(--muted);
+    font: inherit;
+    font-size: 12.5px;
+    padding: 2px 9px;
+    cursor: pointer;
+  }
+  .tab:hover { background: rgba(255, 255, 255, .03); color: var(--text); }
+  .tab.active { background: var(--panel-2); color: var(--text); border-color: #3a424e; }
+  .tab-count { color: #6f7680; font-size: 11px; margin-left: 3px; }
+  /* «Выводы» tab */
+  #conclusions { display: grid; gap: 14px; }
+  #conclusions h2 { font-size: 14px; margin: 4px 0 6px; color: var(--text); }
+  .cc-note { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+  .cc-roles { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .cc-roles td { padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .cc-roles td:first-child { font-weight: 700; width: 3.5em; }
+  .cc-roles code { background: var(--panel-2); padding: 0 4px; border-radius: 3px; font-size: 11.5px; }
+  .cc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 10px; }
+  .cc-card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; min-width: 0; }
+  .cc-card.other { opacity: .6; }
+  .cc-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+  .cc-name { font-weight: 700; font-size: 14px; }
+  .cc-chip { font-size: 11px; padding: 1px 6px; border-radius: 10px; background: var(--blue-bg); color: var(--blue); }
+  .cc-badge { font-size: 11px; padding: 1px 6px; border-radius: 10px; margin-left: auto; }
+  .cc-badge.confirmed { background: var(--green-bg); color: var(--green); }
+  .cc-badge.preliminary { background: var(--yellow-bg); color: var(--yellow); }
+  .cc-badge.none { background: var(--grey-bg); color: var(--grey); }
+  .cc-verdict { font-size: 12.5px; line-height: 1.5; margin: 6px 0; }
+  .cc-kv { font-size: 12px; color: var(--muted); margin: 2px 0; }
+  .cc-kv b { color: var(--text); font-weight: 600; }
+  .cc-stats { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .cc-stats th, .cc-stats td { padding: 3px 6px; border-bottom: 1px solid var(--line); text-align: right; }
+  .cc-stats th:first-child, .cc-stats td:first-child { text-align: left; }
+  .cc-fast { color: var(--green); } .cc-slow { color: var(--red); }
+  .cc-pct { font-weight: 700; }
+  .cc-pct.p95 { color: #4caf6a; } .cc-pct.p80 { color: #9ccc7a; } .cc-pct.p65 { color: #d8c25a; }
+  .cc-pct.p50 { color: #e0954a; } .cc-pct.p0 { color: #d9645f; }
+  .tab-dot { color: var(--blue); margin-left: 4px; }
+  .head-right { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+  .check { color: var(--muted); font-size: 12px; user-select: none; }
+  .check input { vertical-align: -2px; margin-right: 3px; }
+  main { padding: 11px 16px 40px; }
+  h2 { margin: 18px 0 7px; font-size: 14px; font-weight: 600; color: #c9cdd3; }
+  .now-block {
+    margin: 2px 0 13px;
+    padding: 7px 10px 8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  .now-block h2 { margin: 0 0 3px; }
+  .now-line { font-size: 13px; color: #e2e4e8; }
+  .type-badge {
+    display: inline-block;
+    padding: 0 5px;
+    border: 1px solid #3a4049;
+    border-radius: 3px;
+    color: #949ba5;
+    font-size: 10px;
+    line-height: 1.45;
+    background: rgba(255, 255, 255, .02);
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th, td {
+    border: 1px solid var(--line);
+    padding: 2px 6px;
+    line-height: 1.3;
+    text-align: left;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  th { background: var(--panel-2); font-weight: 600; color: #c9cdd3; }
+  tbody tr:nth-child(even) td { background: rgba(255, 255, 255, .012); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+  .scroll { overflow: auto; max-width: 100%; }
+  .group-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin: 0 0 7px;
+    overflow: hidden;
+  }
+  .group-card.live { border-color: #34414d; }
+  .group-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 8px;
+    align-items: baseline;
+    width: 100%;
+    padding: 5px 9px;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .group-head:hover { background: rgba(255, 255, 255, .03); }
+  .group-head:focus-visible, .model-head:focus-visible { outline: 1px solid var(--blue); outline-offset: -1px; }
+  .chev { width: 12px; color: var(--muted); display: inline-block; }
+  .gname { font-weight: 600; color: #dfe2e6; }
+  .level-badge {
+    display: inline-block;
+    padding: 0 4px;
+    border: 1px solid #3a4049;
+    border-radius: 3px;
+    color: #8b929c;
+    font-size: 10px;
+    line-height: 1.45;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0 6px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .badge.running { color: var(--blue); border-color: rgba(118, 153, 184, .38); background: var(--blue-bg); }
+  .badge.completed { color: var(--green); border-color: rgba(122, 169, 140, .38); background: var(--green-bg); }
+  .badge.stopped { color: var(--yellow); border-color: rgba(179, 160, 110, .38); background: var(--yellow-bg); }
+  .badge.failed { color: var(--red); border-color: rgba(181, 122, 126, .38); background: var(--red-bg); }
+  .badge.abandoned { color: var(--grey); border-color: rgba(133, 141, 151, .38); background: var(--grey-bg); }
+  .badge.unknown { color: var(--grey); }
+  .result { font-size: 12px; color: #c5c9cf; }
+  .test-result { font-size: 12px; color: #c5c9cf; }
+  .verdict { font-size: 12px; color: var(--yellow); }
+  .winner { color: var(--yellow); font-size: 12px; }
+  .winner-mark { color: var(--yellow); font-size: 12px; }
+  .provisional { color: #6f7680; font-size: 10px; }
+  .incomplete-note {
+    color: var(--red);
+    font-size: 10px;
+    border: 1px dashed rgba(181, 122, 126, .38);
+    border-radius: 3px;
+    padding: 0 3px;
+  }
+  .live-note { color: var(--blue); font-size: 12px; }
+  .g-extras { display: contents; }
+  .gmeta { margin-left: auto; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  .service-badge {
+    font-size: 10px;
+    color: #6f7680;
+    border: 1px dashed #3a4049;
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .group-body { padding: 0 9px 6px; }
+  .section-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 8px;
+    align-items: baseline;
+    padding: 4px 0 2px;
+    border-top: 1px solid #242932;
+  }
+  .section-title { font-weight: 600; color: #cfd4da; font-size: 12px; }
+  .section-winner { color: var(--yellow); font-size: 11.5px; }
+  .section-note { color: #6f7680; font-size: 10px; }
+  .row-badge {
+    display: inline-block;
+    padding: 0 4px;
+    border: 1px solid #3a4049;
+    border-radius: 3px;
+    color: #8b929c;
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .old-title { margin-top: 24px; }
+  .old-note { margin: 0 0 7px; }
+  .old-card .group-head { cursor: pointer; }
+  .old-badge {
+    display: inline-block;
+    padding: 0 5px;
+    border: 1px dashed #3a4049;
+    border-radius: 4px;
+    color: #7f8792;
+    font-size: 10px;
+    line-height: 1.45;
+  }
+  .empty-note { margin: 10px 0; }
+  .model-block { border-top: 1px solid #242932; }
+  .model-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 7px;
+    align-items: baseline;
+    width: 100%;
+    padding: 3px 0;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .model-head:hover { background: rgba(255, 255, 255, .02); }
+  .model-head { align-items: center; flex-wrap: nowrap; }
+  .mlead { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 380px; max-width: 380px;
+           overflow: hidden; white-space: nowrap; }
+  .mlead .mname { overflow: hidden; text-overflow: ellipsis; }
+  .cellbar.big { gap: 8px; }
+  .cellbar.big .cell-square { min-width: 75px; height: 75px; border-radius: 8px; }
+  .cellbar.big .cell-square .sq-id { font-size: 19px; }
+  .cellbar.big .cell-square .sq-min { font-size: 14px; }
+  /* Phone width: the model name gets its own line and the squares wrap under it instead of running off the card. */
+  @media (max-width: 640px) {
+    .model-head { flex-wrap: wrap; }
+    .mlead { flex: 1 1 100%; max-width: 100%; }
+    .cellbar { max-width: 100%; }
+    .cellbar.big { gap: 6px; }
+    .cellbar.big .cell-square { min-width: 58px; height: 58px; }
+    .cellbar.big .cell-square .sq-id { font-size: 16px; }
+    .cellbar.big .cell-square .sq-min { font-size: 12px; }
+    .cc-roles td, .cc-roles code { overflow-wrap: anywhere; white-space: normal; }
+  }
+  .run-card { padding: 8px 0 10px; border-bottom: 1px solid #242932; }
+  .cell-square.clickable { cursor: pointer; position: relative; }
+  .cell-square.clickable::after { content: "⤢"; position: absolute; top: 1px; right: 3px; font-size: 10px; opacity: .6; }
+  .cell-square.clickable:hover { outline: 2px solid #8ab4f8; outline-offset: 1px; filter: brightness(1.15); }
+  #detail-panel { position: fixed; top: 0; right: 0; bottom: 0; width: min(760px, 52vw); z-index: 50;
+                  background: #15181d; border-left: 1px solid #333944; box-shadow: -8px 0 24px rgba(0,0,0,.45);
+                  display: flex; flex-direction: column; }
+  #detail-panel.hidden { display: none; }
+  .detail-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #2a2f37; }
+  .detail-head .x { margin-left: auto; background: none; border: 1px solid #3a4049; color: #c9cdd3;
+                    border-radius: 6px; padding: 2px 10px; cursor: pointer; font-size: 16px; }
+  .detail-body { overflow: auto; padding: 4px 14px 16px; flex: 1; }
+  .detail-body h3 { font-size: 12.5px; color: #9aa3ad; margin: 12px 0 6px; font-weight: 600; }
+  .detail-body pre { white-space: pre-wrap; word-break: break-word; background: #0f1216; border: 1px solid #262b33;
+                     border-radius: 6px; padding: 8px 10px; font-size: 12px; max-height: 380px; overflow: auto; margin: 4px 0; }
+  .detail-turn { border-top: 1px solid #262b33; padding: 8px 0; }
+  .detail-turn .t-head { font-size: 12.5px; color: #c5c9cf; }
+  .detail-body details summary { cursor: pointer; color: #9aa3ad; font-size: 12px; }
+  .detail-body .res-bad { border-color: #5a3434; }
+  .detail-wait { color: #8ab4f8; font-size: 12.5px; padding: 10px 0; }
+  .live-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #4cc38a;
+              box-shadow: 0 0 6px #4cc38a; animation: livepulse 1.6s ease-in-out infinite; }
+  @keyframes livepulse { 50% { opacity: .35; } }
+  .run-title { font-size: 13.5px; margin-bottom: 6px; }
+  .run-meta { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .run-meta .toolerror { color: #c98b8b; }
+  .mname { color: #d7dade; font-size: 12.5px; }
+  .mconfig { color: #7f8792; font-size: 11.5px; }
+  .rowlabel-mini { color: #6f7680; font-size: 10px; }
+  .mright {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px 9px;
+    flex-wrap: wrap;
+  }
+  .mcounts { color: #c5c9cf; font-size: 12px; white-space: nowrap; }
+  .mtime { color: var(--muted); font-size: 11.5px; }
+  .cellbar { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px 0; }
+  .cell-square {
+    display: inline-flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 50px;
+    height: 50px;
+    padding: 2px 5px;
+    border: 1px solid #3a4049;
+    border-radius: 6px;
+    background: transparent;
+    color: #c9cdd3;
+    line-height: 1.05;
+    white-space: nowrap;
+  }
+  .cell-square .sq-id { font-size: 14px; font-weight: 700; }
+  .cell-square .sq-min { font-size: 11.5px; line-height: 1.2; opacity: .9; }
+  .cell-square.cw {
+    color: #b7d6c3;
+    border-color: rgba(122, 169, 140, .62);
+    background: rgba(122, 169, 140, .24);
+  }
+  .cell-square.code {
+    color: #ddcc9d;
+    border-color: rgba(179, 160, 110, .62);
+    background: rgba(179, 160, 110, .24);
+  }
+  .cell-square.fail {
+    color: #e2b4b7;
+    border-color: rgba(181, 122, 126, .62);
+    background: rgba(181, 122, 126, .24);
+  }
+  .cell-square.infra {
+    color: #d2d7dd;
+    border-color: rgba(133, 141, 151, .60);
+    background: rgba(133, 141, 151, .20);
+  }
+  .cell-square.run {
+    color: #bcd5ea;
+    border-color: rgba(118, 153, 184, .68);
+    background: rgba(118, 153, 184, .24);
+  }
+  .cell-square.stall {
+    color: #e2b4b7;
+    border-color: rgba(181, 122, 126, .68);
+    border-style: dashed;
+    background: rgba(181, 122, 126, .18);
+  }
+  .cell-square.pending {
+    color: #6f7680;
+    border-color: rgba(133, 141, 151, .40);
+    border-style: dotted;
+  }
+  .cell-square.skipped {
+    color: #858d97;
+    border-color: rgba(133, 141, 151, .45);
+    border-style: dashed;
+  }
+  .cell-square.empty {
+    color: #6f7680;
+    border-color: #3a4049;
+    border-style: dashed;
+  }
+  .stage-wrap { padding: 0 0 4px 18px; }
+  .stages { width: 100%; table-layout: fixed; border-collapse: collapse; }
+  .stages td {
+    border: 0;
+    border-top: 1px solid #23272f;
+    padding: 2px 6px;
+    font-size: 12px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stages tr:nth-child(even) td { background: transparent; }
+  .stage-task { width: 44px; font-weight: 600; color: #c9cdd3; }
+  .stage-icon { width: 26px; text-align: center; font-size: 13px; }
+  .stage-time { width: 92px; color: var(--muted); }
+  .stage-actions { width: 104px; color: var(--muted); }
+  .stage-result { color: #b9bec6; }
+  .stage.cw .stage-icon { color: var(--green); }
+  .stage.code .stage-icon { color: var(--yellow); }
+  .stage.fail .stage-icon { color: var(--red); }
+  .stage.infra .stage-icon { color: var(--grey); }
+  .stage.skipped .stage-icon { color: var(--grey); }
+  .stage.old_benchmark .stage-icon { color: var(--grey); }
+  .stage.run .stage-icon { color: var(--blue); }
+  .stage.stall .stage-icon { color: var(--red); }
+  .stage.unknown .stage-icon { color: var(--muted); }
+  .stalled-text { color: var(--red); }
+  .stall-badge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--red);
+    border: 1px solid rgba(181, 122, 126, .35);
+    background: var(--red-bg);
+  }
+  .action { color: #c6cad0; }
+  .toolerror { max-width: 380px; overflow: hidden; text-overflow: ellipsis; color: #c98a8e; }
+  .error {
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid #6b3b3e;
+    border-radius: 5px;
+    background: #241719;
+    color: #d9a3a7;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="head-row">
+    <h1>Конкурсы моделей</h1>
+    <div id="ollama-line" class="ollama-line mono small">Ollama: проверяется…</div>
+  </div>
+  <div class="legend" id="legend">
+    <span>✅ решено и проверено моделью</span><span class="sep">·</span>
+    <span>🟡 код верный, но модель не прогнала свои тесты</span><span class="sep">·</span>
+    <span>❌ не решено</span><span class="sep">·</span>
+    <span>⚠️ сбой инфраструктуры (не вина модели)</span><span class="sep">·</span>
+    <span>⏳ идёт сейчас</span><span class="sep">·</span>
+    <span>🛑 похоже на зависание (журнал молчит &gt; 10 мин)</span>
+  </div>
+  <div class="head-controls">
+    <div class="tabs" id="tabs">
+      <button type="button" class="tab" data-category="contest">Конкурсы<span class="tab-count" id="tab-contest-count"></span><span class="tab-dot hidden" id="tab-contest-dot">⏳</span></button>
+      <button type="button" class="tab" data-category="test">Тесты моделей<span class="tab-count" id="tab-test-count"></span><span class="tab-dot hidden" id="tab-test-dot">⏳</span></button>
+      <button type="button" class="tab" data-category="conclusions">Выводы<span class="tab-count" id="tab-conclusions-count"></span></button>
+    </div>
+    <div class="head-right">
+      <label class="check">
+        <input type="checkbox" id="show-service"> показать служебные
+        <span id="service-count" class="muted"></span>
+      </label>
+      <span id="meta" class="muted small">Загрузка…</span>
+    </div>
+  </div>
+<a href="/about.html" style="color:#8ab4f8">About &amp; methodology</a></header>
+<main>
+  <div id="error" class="error hidden"></div>
+  <section class="now-block" id="now-block">
+    <h2 id="now-title">Идёт сейчас</h2>
+    <div id="now-line" class="now-line">Загрузка…</div>
+    <div id="running"></div>
+  </section>
+  <div id="groups"></div>
+  <section id="conclusions" hidden></section>
+  <aside id="detail-panel" class="hidden"><div class="detail-head"><span class="h"></span>
+    <button class="x" type="button" data-close title="Закрыть (Esc)">×</button></div><div class="detail-body"></div></aside>
+  <div id="old-benchmarks">
+    <h2 class="old-title" id="old-title" hidden>Старый бенчмарк</h2>
+    <p class="muted small old-note" id="old-note" hidden>Из родительской папки: без инструментов, без кубка, только ✅/❌/⚠️.</p>
+    <div id="old-list"></div>
+  </div>
+</main>
+<script>
+
+const DASHBOARD_TRANSLATIONS = {"Конкурсы моделей — мониторинг": "Model contests — live dashboard", "Конкурсы моделей": "Model contests", "решено и проверено моделью": "solved and tested by the model", "код верный, но модель не прогнала свои тесты": "correct code; model did not run its own tests", "сбой инфраструктуры (не вина модели)": "infrastructure failure (not a model failure)", "похоже на зависание (журнал молчит > 10 мин)": "possibly stalled (no log updates for over 10 min)", "похоже на зависание (журнал молчит &gt; 10 мин)": "possibly stalled (no log updates for over 10 min)", "Конкурсы": "Contests", "Конкурс": "Contest", "Тесты моделей": "Model tests", "Тест модели": "Model test", "Выводы": "Conclusions", "показать служебные": "show internal runs", "только чтение": "read only", "автообновление 5 с": "refreshes every 5 s", "Закрыть (Esc)": "Close (Esc)", "Из родительской папки: без инструментов, без кубка, только ✅/❌/⚠️.": "From the parent folder: no tools, no trophy; only ✅/❌/⚠️.", "Старый бенчмарк": "Legacy benchmark", "старый бенчмарк": "legacy benchmark", "Нет конкурсов за последние 24 часа.": "No contests available.", "Нет тестов моделей за последние 24 часа.": "No model tests available.", "Нет данных.": "No data.", "нет данных": "no data", "Загрузка…": "Loading…", "загрузка…": "loading…", "Ollama: проверяется…": "Ollama: checking…", "Ollama: модели не загружены": "Ollama: no models loaded", "Ollama: недоступен": "Ollama: unavailable", "Обновление не удалось": "Refresh failed", "Не удалось открыть эпизод": "Could not open episode", "Не удалось прочитать эпизод": "Could not read episode", "Идёт сейчас": "Running now", "идёт сейчас": "running now", "Ничего не идёт": "Nothing is running", "Ничего не выполняется.": "Nothing is running.", "Активных эпизодов нет": "No active episodes", "Последний прогон: нет данных": "Last run: no data", "Последний прогон": "Last run", "Похоже на зависание": "Possibly stalled", "похоже на зависание": "possibly stalled", "Сейчас идёт прогон этой модели и конфига": "This model/config is currently running", "status.json говорит running, но свежих записей нет": "status.json says running, but there are no recent log entries", "Журнал молчит больше 10 мин. Долгая генерация может быть нормальной; это подсказка, а не приговор.": "No log updates for over 10 min. A long generation may be normal; this is a hint, not a verdict.", "нет активности": "no recent activity", "не завершён": "unfinished", "Меньше задач, чем у других: не может победить": "Fewer tasks than other entries: ineligible to win", "Победитель; предварительно": "Winner; provisional", "предварительно": "provisional", "подтверждено": "confirmed", "без выводов": "no conclusions yet", "неполный": "incomplete", "Вердикт испытания из summary.md": "Trial verdict from summary.md", "Вердикт": "Verdict", "Нет episode.json; журнал не менялся больше 2 ч (прервано или заброшено?)": "No episode.json; no log changes for over 2 h (interrupted or abandoned?)", "Пустая папка эпизода: нет manifest.json, transcript.jsonl и episode.json": "Empty episode folder: no manifest.json, transcript.jsonl or episode.json", "episode.json есть, но прочитать его не удалось (возможно, файл ещё пишется)": "episode.json exists but cannot be read (it may still be writing)", "Прервано: прогон остановлен посреди эпизода; эпизод переиграется, когда прогон продолжат": "Interrupted mid-episode; the episode will be retried when the run resumes", "прервано (процесс прогона остановлен)": "interrupted (runner stopped)", "ошибка чтения episode.json": "episode.json read error", "нет status.json и эпизодов": "no status.json or episodes", "status.json отсутствует или не читается": "status.json is missing or unreadable", "Запланировано; эпизод ещё не начинался": "Planned; episode has not started", "Запланировано, но прогон остановился раньше": "Planned, but the run stopped before this episode", "Пропущено: не успело до дедлайна": "Skipped: not enough time before the deadline", "не сыграно: прогон остановлен": "not run: runner stopped", "не сыграно": "not run", "ещё не играли": "not run yet", "не успело до дедлайна": "not enough time before deadline", "не успел": "deadline reached", "Нет данных эпизода": "No episode data", "Сбой запуска": "Launch failure", "Сбой инфраструктуры": "Infrastructure failure", "сбой инфраструктуры": "infrastructure failure", "Код верный, но модель не прогнала свои тесты": "Correct code; the model did not run its own tests", "Код верный, тесты не прогнаны": "Correct code; tests not run", "код верный, тесты не прогнаны": "correct code; tests not run", "код верный, без проверки": "correct code; not tested", "Решено, тесты пройдены": "Solved; tests passed", "решено и проверено": "solved and tested", "код не прошёл проверку": "code failed verification", "контекст обрезан": "context truncated", "Обрезано по контексту.": "Context was truncated.", "Не решено": "Not solved", "не решено": "not solved", "Не прошёл": "Failed", "не прошёл проверку": "failed verification", "Пройдено": "Passed", "Сбой": "Failure", "сбой": "failure", "инфраструктура": "infrastructure", "Распределение по ролям": "Role assignments", "Модели": "Models", "Модель": "Model", "Бейджи": "Badges", "Моделей+конфигов": "Models/configurations", "Моделей": "Models", "Класс": "Class", "Тестов": "Tests", "Успех": "Success", "Время/задача": "Time/task", "Против класса": "Relative to class", "Слабые места": "Weaknesses", "Не давать": "Avoid", "Давать": "Use for", "Тестов пока нет.": "No tests yet.", "Секции Light/Medium сравниваются только внутри себя.": "Light/Medium sections are compared only within their own tier.", "Ранжирование: больше ✅, затем ✅+🟡; время и действия не учитываются.": "Ranking: most ✅, then ✅+🟡; time and actions do not affect ranking.", "Успех: для XS/S/M — доля верного кода (✅ + 🟡), для L и C++ — доля решённого и проверенного самой моделью (✅). ": "Success: for XS/S/M, the share of correct code (✅ + 🟡); for L and C++, the share solved and tested by the model (✅). ", "Тесты — все эпизоды и запросы по всем конфигам модели (без сбоев стенда: HTTP 400/500). Скорость — среднее время ": "Tests include all episodes and requests across model configurations, excluding infrastructure failures (HTTP 400/500). Speed is the mean time ", "на задачу против среднего по моделям того же класса: меньше 1× быстрее одноклассников. Conclusions are maintained by the benchmark owner": "per task relative to the class average: below 1× means faster than peers. Conclusions are maintained by the benchmark owner", "Кеш тест": "Cache test", "Турнир · встроенные инструменты": "Tournament · native tools", "матрица конфигов": "configuration matrix", "калибровка контекста": "context calibration", "калибровка, проверка": "calibration validation", "полный High": "full High", "Кубка нет: это отдельное испытание модели.": "No trophy: this is a separate model trial.", "без кубка": "no trophy", "подсказка не участвует": "hint variant excluded", "служебное имя": "internal name", "служебный": "internal", "запечённые": "baked", "абляция": "ablation", "новая": "new", "Задание": "Task", "Задача": "Task", "Задач нет.": "No tasks.", "Запросов нет.": "No requests.", "Эпизоды не найдены.": "No episodes found.", "Ходы модели": "Model turns", "Последнее действие": "Last action", "Последнее событие": "Last event", "Последняя запись": "Last write", "Ошибка инструмента": "Tool error", "Конфиг": "Config", "Эпизод": "Episode", "Победители": "Winners", "Победитель": "Winner", "Состояние": "Status", "Статусов завершено": "Completed statuses", "Нарушения": "Violations", "нарушения": "violations", "Причина": "Reason", "Этапов": "Stages", "Этап": "Stage", "Испытание": "Trial", "Нажмите: задание и ответы модели": "Click for task and model responses", "показаны последние": "showing the latest", "ответ инструмента": "tool response", "размышления": "reasoning", "модель генерирует ход": "model is generating turn", "Ответ появится целиком, когда ход закончится (запускатель получает ответы не по токенам).": "The full response appears when this turn completes (the runner does not stream tokens).", "с. Ответ появится целиком, когда ход закончится (запускатель получает ответы не по токенам).": "s. The full response appears when the turn completes (the runner does not stream tokens).", "последнее действие": "last action", "последняя запись": "last write", "список файлов": "list files", "чтение файла": "read file", "запись файла": "write file", "запуск тестов": "run tests", "текстовый ответ": "text response", "команда": "command", "итог": "result", "действий": "actions", "действия": "actions", "действие": "action", "эпизодов": "episodes", "эпизода": "episodes", "эпизод": "episode", "запросов": "requests", "запроса": "requests", "запрос": "request", "моделей": "models", "модели": "models", "модель": "model", "готово": "done", "подготовка": "preparing", "очередь": "queue", "запланировано": "planned", "ожидает": "pending", "неизвестно": "unknown", "нет статуса": "no status", "без статуса": "no status", "заброшен": "abandoned", "остановлен": "stopped", "завершён": "completed", "прервано": "interrupted", "решено": "solved", "ошибка чтения": "read error", "ошибка": "error", "обрезано, всего": "truncated; total", "символов": "characters", "симв.": "chars", "ток.": "tokens", "ходов": "turns", "Ход": "Turn", "ход": "turn", "Прошло": "Elapsed", "прошло": "elapsed", "время": "time", "обновлено": "updated", "последний": "last", "сейчас": "now", "идёт": "running", "ещё": "more", "задача": "task", "журнал молчит": "no log updates for", "индекс": "index", "запись": "write", "старт": "started", " из ": " of ", " в ": " at ", "только что": "just now", " с назад": " s ago", " мин назад": " min ago", " дн назад": " d ago", " ч ": " h ", " мин ": " min ", " с;": " s;", " Б": " B", " КБ": " KB", " МБ": " MB", " ГБ": " GB", " ТБ": " TB", "код": "code"};
+const DASHBOARD_CONCLUSIONS_EN = {"_about": "English translation of the curated conclusions. Statistics are computed from runs/. This translation preserves the dated findings; it does not update their factual status.", "updated": "2026-10-27", "roles": [{"size": "XS", "contest": "SuperLight — high-volume short JSON tasks", "tags": ["gemma4:e4b-T-XS1", "qwen3.5:4b-T-XS2", "granite4.2:3b-T-XS3"], "status": "ready"}, {"size": "S", "contest": "Light — small code edits", "tags": ["granite4.2:3b-T-S1", "gemma4:e4b-T-S2"], "status": "ready"}, {"size": "M", "contest": "Medium — changes across several files", "tags": ["K2 Q5 → T-M1 (awaiting baking)", "Granite 4.2 8B — fast alternative"], "status": "winner confirmed; not baked"}, {"size": "L", "contest": "High — complex tasks", "tags": [], "status": "GLM and Nemotron not tested after the memory fix"}, {"size": "XL", "contest": "Mastermind", "tags": [], "status": "separate stage"}], "models": [{"key": "gemma4:e4b", "name": "Gemma 4 E4B", "roles": ["XS1", "S2"], "status": "confirmed", "verdict": "Best for high-volume text work: the fewest errors and the fastest. On agent tasks it writes correct code but rarely checks itself without a hint; a system rule to write and run tests first triples fully successful results.", "give": "Extraction, classification, short text and code edits", "avoid": "Complex validation and compatibility without review; long files with an 8–16K context", "weak": "Unnecessary imports (L2: pulls in requests); does not write its own tests"}, {"key": "granite4.2:3b", "name": "Granite 4.2 3B", "roles": ["S1", "XS3"], "status": "preliminary", "verdict": "Light leader for correct code and fast execution. In extraction it trails Gemma and Qwen 4B, losing names and fields.", "give": "Small code edits and simple fixes", "avoid": "Extracting fields from messy text", "weak": "S2 extraction: 13 out of 60"}, {"key": "qwen3.5:4b", "name": "Qwen 3.5 4B", "roles": ["XS2"], "status": "confirmed", "verdict": "Nearly matches Gemma on high-volume JSON tasks, but slower. Unstable on agentic Medium tasks.", "give": "Extraction and normalization; backup XS", "avoid": "State changes across multiple files", "weak": "Deduplication and stale state in Medium"}, {"key": "hf.co/bartowski/K2-Horizon-7B-GGUF:Q5_K_M", "name": "K2 Horizon 7B Q5", "roles": ["M1"], "status": "confirmed", "verdict": "Medium leader across three seeds, with no code failure except a timeout. Slowest finalist. In C++ it implemented checks and safeguards thoroughly but got the core logic wrong; long answers can cause timeouts.", "give": "Medium tasks where reliability matters more than speed", "avoid": "Strict per-turn deadlines", "weak": "Long generations and timeouts; core logic for unfamiliar binary formats"}, {"key": "granite4.2:8b", "name": "Granite 4.2 8B", "roles": ["M — fast alternative"], "status": "confirmed", "verdict": "Fastest Medium finalist, 2–3 times faster than K2. The overnight 5/5 was fortunate: on new seeds it consistently fails M2 (passing a parameter through the queue) and M5.", "give": "Routine changes across several files when speed matters", "avoid": "Propagating settings and compatibility changes without tests", "weak": "M2, M5"}, {"key": "qwen3.5:9b", "name": "Qwen 3.5 9B", "roles": ["M — third"], "status": "confirmed", "verdict": "Matches Granite 8B in Medium quality, but is slower. With th-coding thinking it is stable on four of five tasks. Awaiting High.", "give": "Medium tasks with a clear testing loop", "avoid": "—", "weak": "M1 and M5 on some seeds"}, {"key": "ingloryon/k2-horizon:7b-q4_K_M", "name": "K2 Horizon 7B Q4", "roles": ["L control"], "status": "preliminary", "verdict": "The only K2 build with a thinking control. Kept as a High control group.", "give": "Control runs", "avoid": "—", "weak": "Medium: 3/5 on one seed"}, {"key": "qwen3-coder:30b", "name": "Qwen3 Coder 30B", "roles": ["L candidate"], "status": "preliminary", "verdict": "Loads only with use_mmap. Fast for 30B (about 27 tokens/s), but achieved one fully successful High episode out of five on one seed.", "give": "—", "avoid": "Drawing conclusions before three seeds", "weak": "H2, H4, H5"}, {"key": "gpt-oss:20b", "name": "GPT-OSS 20B", "roles": ["L candidate"], "status": "preliminary", "verdict": "Not yet tested in High.", "give": "—", "avoid": "—", "weak": "—"}, {"key": "nemotron-3.5-lightning:30b", "name": "Nemotron 3.5 30B", "roles": ["L candidate"], "status": "preliminary", "verdict": "Before the memory fix it failed to load (HTTP500). Needs a fair High run with use_mmap.", "give": "—", "avoid": "—", "weak": "—"}, {"key": "glm-4.7-flash:latest", "name": "GLM 4.7 Flash", "roles": ["L candidate"], "status": "preliminary", "verdict": "Before the memory fix it failed to load (HTTP500). Needs a fair High run with use_mmap.", "give": "—", "avoid": "—", "weak": "—"}]};
+let dashboardLanguage = 'en';
+try { dashboardLanguage = new URLSearchParams(location.search).get('lang') || localStorage.getItem('dashboard.language') || 'en'; } catch (_) {}
+if (!['en','ru'].includes(dashboardLanguage)) dashboardLanguage = 'en';
+const translationKeys = Object.keys(DASHBOARD_TRANSLATIONS).sort((a,b)=>b.length-a.length);
+function dashboardTranslate(value) {
+  let text = String(value);
+  if (dashboardLanguage === 'ru') return text;
+  // A single pass avoids translating words inside an already translated phrase.
+  const pattern = new RegExp(translationKeys.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'),'g');
+  text = text.replace(pattern, x=>DASHBOARD_TRANSLATIONS[x]);
+  return text.replace(/(\d+(?:[.,]\d+)?)\s*ч(?=\d|\s|$)/g,'$1 h ').replace(/(\d+(?:[.,]\d+)?)\s*мин(?=\s|$)/g,'$1 min').replace(/(\d+(?:[.,]\d+)?)м(?=\d|\s|$)/g,'$1m ').replace(/(\d+(?:[.,]\d+)?)\s*с(?=\s|$)/g,'$1 s');
+}
+function localizedConclusions(cc) {
+  if (dashboardLanguage === 'ru') return cc;
+  const byKey = new Map((DASHBOARD_CONCLUSIONS_EN.models||[]).map(m=>[m.key,m]));
+  return {...cc, roles: (cc.roles||[]).map(r=>({...r,...(DASHBOARD_CONCLUSIONS_EN.roles||[]).find(e=>e.size===r.size)})),
+    models:(cc.models||[]).map(m=>{const t=byKey.get(m.key); return t ? {...m, ...Object.fromEntries(['verdict','give','avoid','weak','roles'].map(k=>[k,t[k]]))} : m;})};
+}
+const textHistory = new WeakMap();
+const attrHistory = new WeakMap();
+let translatingDashboard = false;
+function translateDashboardDOM() {
+  if (translatingDashboard) return;
+  translatingDashboard = true;
+  try {
+    document.documentElement.lang=dashboardLanguage;
+    const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node=walker.nextNode())) {
+      if (node.parentElement.closest('script,style,pre,code,textarea,[data-no-translate]')) continue;
+      const old=textHistory.get(node);
+      const original=old && node.nodeValue===old.rendered ? old.original : node.nodeValue;
+      const rendered=dashboardTranslate(original);
+      textHistory.set(node,{original,rendered});
+      if (node.nodeValue!==rendered) node.nodeValue=rendered;
+    }
+    document.querySelectorAll('[title],[aria-label],[placeholder]').forEach(el=>{
+      const history=attrHistory.get(el)||{};
+      ['title','aria-label','placeholder'].forEach(key=>{
+        if (!el.hasAttribute(key)) return;
+        const value=el.getAttribute(key), old=history[key];
+        const original=old && value===old.rendered ? old.original : value;
+        const rendered=dashboardTranslate(original);
+        history[key]={original,rendered};
+        if(value!==rendered) el.setAttribute(key,rendered);
+      });attrHistory.set(el,history);
+    });
+    document.title=dashboardLanguage==='en' ? 'Model contests — live dashboard' : 'Конкурсы моделей — мониторинг';
+  } finally { translatingDashboard=false; }
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const select=document.createElement('select');select.id='dashboard-language';select.setAttribute('aria-label','Language');select.dataset.noTranslate='1';
+  select.innerHTML='<option value="en">English<\/option><option value="ru">Русский<\/option>';select.value=dashboardLanguage;
+  const label=document.createElement('label');label.dataset.noTranslate='1';label.textContent='Language ';label.appendChild(select);
+  (document.querySelector('.toolbar')||document.querySelector('header')||document.body).appendChild(label);
+  select.addEventListener('change',()=>{dashboardLanguage=select.value;try{localStorage.setItem('dashboard.language',dashboardLanguage);}catch(_){}
+    const url=new URL(location.href);url.searchParams.set('lang',dashboardLanguage);history.replaceState(null,'',url);
+    conclusionsSig=null;if(lastState)render(lastState,true);translateDashboardDOM();
+  });
+  let pending=false;
+  new MutationObserver(()=>{if(!pending){pending=true;queueMicrotask(()=>{pending=false;translateDashboardDOM();});}}).observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','aria-label','placeholder']});
+  translateDashboardDOM();
+});
+
+
+const REFRESH_MS = 60000;
+const TREE_KEY = "dashboard.tree.v2";
+const CATEGORY_KEY = "dashboard.category.v1";
+const SERVICE_KEY = "dashboard.showService.v1";
+
+function esc(value) {
+  if (value === null || value === undefined) return "";
+  return String(value).replace(/[&<>"']/g, function (ch) {
+    return {"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[ch];
+  });
+}
+
+function loadObject(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+let treeState = loadObject(TREE_KEY);
+let selectedCategory = null;
+try {
+  const stored = localStorage.getItem(CATEGORY_KEY);
+  if (stored === "contest" || stored === "test" || stored === "conclusions") selectedCategory = stored;
+} catch (err) {}
+let showService = false;
+try { showService = localStorage.getItem(SERVICE_KEY) === "1"; } catch (err) {}
+let lastState = null;
+let firstRender = true;
+
+function saveTree() {
+  try { localStorage.setItem(TREE_KEY, JSON.stringify(treeState)); } catch (err) {}
+}
+
+function isOpen(key, defaultOpen) {
+  if (Object.prototype.hasOwnProperty.call(treeState, key)) return !!treeState[key];
+  return !!defaultOpen;
+}
+
+function setOpen(key, open) {
+  treeState[key] = open;
+  saveTree();
+}
+
+function pluralRu(number, one, few, many) {
+  const value = Math.abs(Number(number) || 0);
+  if (value % 10 === 1 && value % 100 !== 11) return one;
+  if (value % 10 >= 2 && value % 10 <= 4 && (value % 100 < 12 || value % 100 > 14)) return few;
+  return many;
+}
+
+function actionsRu(number) {
+  if (number === null || number === undefined || number === "") return "—";
+  const value = Number(number);
+  if (!isFinite(value)) return "—";
+  return value + " " + pluralRu(value, "действие", "действия", "действий");
+}
+
+function countsLine(counts) {
+  const parts = [
+    "✅ " + (counts.cw || 0),
+    "🟡 " + (counts.code || 0),
+    "❌ " + (counts.fail || 0),
+    "⚠️ " + (counts.infra || 0)
+  ];
+  if (counts.running) parts.push("⏳ " + counts.running);
+  if (counts.stalled) parts.push("🛑 " + counts.stalled);
+  if (counts.skipped) parts.push("⏭ " + counts.skipped);
+  if (counts.unknown) parts.push("? " + counts.unknown);
+  return parts.join(" · ");
+}
+
+function oldCountsLine(counts) {
+  const parts = [
+    "✅ " + (counts.cw || 0),
+    "❌ " + (counts.fail || 0)
+  ];
+  if (counts.infra) parts.push("⚠️ " + counts.infra);
+  if (counts.unknown) parts.push("? " + counts.unknown);
+  return parts.join(" · ");
+}
+
+function oldResult(c) {
+  const parts = [
+    "✅ " + (c.counts.cw || 0),
+    "❌ " + (c.counts.fail || 0)
+  ];
+  if (c.counts.infra) parts.push("⚠️ " + c.counts.infra);
+  if (c.counts.unknown) parts.push("? " + c.counts.unknown);
+  return parts.join(" · ") + " из " + c.total;
+}
+
+function testResult(c) {
+  const parts = [
+    "✅ " + (c.counts.cw || 0),
+    "🟡 " + (c.counts.code || 0),
+    "❌ " + (c.counts.fail || 0)
+  ];
+  if (c.counts.infra) parts.push("⚠️ " + c.counts.infra);
+  if (c.counts.running) parts.push("⏳ " + c.counts.running);
+  if (c.counts.stalled) parts.push("🛑 " + c.counts.stalled);
+  if (c.counts.skipped) parts.push("⏭ " + c.counts.skipped);
+  if (c.counts.unknown) parts.push("? " + c.counts.unknown);
+  return parts.join(" · ") + " из " + c.task_total;
+}
+
+function runningLabel(item) {
+  if (!item.label || item.label === "(self)") return item.contest;
+  return item.contest + " [" + item.label + "]";
+}
+
+function summaryLine(state) {
+  const running = visibleRunning(state);
+  if (!running.length) return "Ничего не идёт";
+  const first = running[0];
+  let text = (first.stalled ? "🛑 Похоже на зависание: Конкурс " : "Конкурс ") +
+    first.contest +
+    " · " + (first.short_model || first.model) +
+    " · задача " + first.task +
+    " · ход " + first.turn +
+    " · " + (first.elapsed_ru || first.elapsed);
+  if (running.length > 1) text += " · ещё " + (running.length - 1);
+  return text;
+}
+
+function summaryTitle(state) {
+  const running = visibleRunning(state);
+  if (!running.length) return "Активных эпизодов нет";
+  return running.map(function (r, index) {
+    const mark = r.stalled ? "🛑" : "⏳";
+    return (index + 1) + ". " + mark + " " + runningLabel(r) + " · " +
+      r.model + " · " + r.task + " · " + (r.elapsed_ru || r.elapsed) +
+      " · ход " + r.turn + " · запись " + (r.last_write_ago_ru || r.last_write_ago);
+  }).join("\n");
+}
+
+function captureScroll() {
+  const page = {x: window.scrollX, y: window.scrollY};
+  const scrollers = {};
+  document.querySelectorAll("[data-scroll-key]").forEach(function (el) {
+    scrollers[el.getAttribute("data-scroll-key")] = {left: el.scrollLeft, top: el.scrollTop};
+  });
+  return {page: page, scrollers: scrollers};
+}
+
+function restoreScroll(saved) {
+  if (!saved) return;
+  window.scrollTo(saved.page.x, saved.page.y);
+  document.querySelectorAll("[data-scroll-key]").forEach(function (el) {
+    const pos = saved.scrollers[el.getAttribute("data-scroll-key")];
+    if (pos) { el.scrollLeft = pos.left; el.scrollTop = pos.top; }
+  });
+}
+
+function visibleGroups(state) {
+  return state.groups.filter(function (c) { return showService || !c.service; });
+}
+
+function visibleRunning(state) {
+  return state.running.filter(function (r) { return showService || !r.service; });
+}
+
+function groupsFor(state, category) {
+  return visibleGroups(state).filter(function (c) { return c.category === category; });
+}
+
+function pickCategory(state) {
+  if (selectedCategory === "contest" || selectedCategory === "test" || selectedCategory === "conclusions") return selectedCategory;
+  const live = visibleGroups(state).filter(function (c) { return c.live; })[0];
+  if (live) return live.category;
+  const contest = groupsFor(state, "contest");
+  return contest.length ? "contest" : "test";
+}
+
+function groupMeta(c) {
+  const parts = [c.episodes_text];
+  if (c.wall_display && c.wall_display !== "—") parts.push(c.wall_display);
+  parts.push("обновлено " + c.updated_ago);
+  return parts.join(" · ");
+}
+
+function groupExtras(c) {
+  let html = "";
+  if (c.queue_progress) {
+    const phaseLabels = {starting: "подготовка", superlight: "SuperLight", "light-medium": "Light/Medium", "high-mmap": "High mmap", complete: "готово"};
+    const progress = c.queue_progress;
+    let text = phaseLabels[progress.phase] || progress.phase || "очередь";
+    if (Number.isInteger(progress.done) && Number.isInteger(progress.total)) {
+      text += " · " + progress.done + "/" + progress.total;
+    }
+    html += '<span class="live-note">' + esc(text) + '</span>';
+  }
+  if (c.live) {
+    if (c.live_info) {
+      const li = c.live_info;
+      html += '<span class="live-note">' + (li.stalled ? "🛑" : "⏳") + " идёт: " +
+        esc(li.short_model || li.model) + " · " + esc(li.task) + " · " + esc(li.elapsed) +
+        (li.more ? " · ещё " + li.more : "") + "</span>";
+    } else {
+      html += '<span class="live-note">⏳ идёт</span>';
+    }
+  }
+  if (!c.live && c.state_class === "running") {
+    html += '<span class="incomplete-note" title="status.json говорит running, но свежих записей нет">нет активности</span>';
+  }
+  if (c.category === "contest") {
+    if (c.winner_text) {
+      html += '<span class="winner">' + esc(c.winner_text) + '</span>' +
+        '<span class="provisional">предварительно</span>';
+    }
+    if (c.stopped) {
+      html += '<span class="incomplete-note">не завершён</span>';
+    }
+    if (!c.winner_text && !c.live) {
+      html += '<span class="result">' + esc(c.result_text) + '</span>';
+    }
+  } else {
+    html += '<span class="test-result">' + esc(testResult(c)) + '</span>';
+    if (c.verdict_text) {
+      html += '<span class="verdict" title="Вердикт испытания из summary.md">Вердикт: ' + esc(c.verdict_text) + '</span>';
+    }
+  }
+  return html;
+}
+
+function setText(el, text) {
+  if (!el) return;
+  const value = text === null || text === undefined ? "" : String(text);
+  if (el.textContent !== value) el.textContent = value;
+}
+
+function setHtml(el, html) {
+  if (!el) return;
+  const value = html || "";
+  if (el.innerHTML !== value) el.innerHTML = value;
+}
+
+function stageData(task, cell) {
+  if (!cell) return null;
+  const kind = cell.stalled ? "stall" : (cell.kind || "unknown");
+  const time = cell.kind === "run" ? (cell.elapsed || "—") : (cell.wall_display || "—");
+  let actions = "—";
+  let result = "";
+  if (cell.kind === "run") {
+    actions = "ход " + (cell.turn === undefined || cell.turn === null ? "—" : cell.turn);
+    result = "последнее действие: " + (cell.last_action_ru || cell.last_action || "—");
+  } else if (cell.kind === "skipped") {
+    result = cell.reason || "не успел";
+  } else if (cell.kind === "unknown") {
+    result = cell.title || "нет данных";
+  } else {
+    if (cell.tool_calls !== null && cell.tool_calls !== undefined) {
+      actions = actionsRu(cell.tool_calls);
+    }
+    result = cell.old_benchmark
+      ? (cell.reason || cell.status_text || "—")
+      : "итог: " + (cell.reason || cell.status_text || "—");
+  }
+  return {
+    kind: kind,
+    time: time,
+    actions: actions,
+    result: result,
+    icon: cell.icon || "?",
+    title: cell.title || ""
+  };
+}
+
+function shortMinutes(value) {
+  const text = String(value || "").trim();
+  if (!text || text === "—") return "";
+  return text
+    .replace(/\s*мин(?:ут)?/gi, "м")
+    .replace(/\s*ч(?:ас)?/gi, "ч")
+    .replace(/\s*с(?:ек)?/gi, "с")
+    .replace(/\s+/g, "");
+}
+
+function squareInfo(task, cell) {
+  if (!cell) {
+    return {
+      cls: "empty",
+      id: task,
+      min: "",
+      title: task + " · ещё не играли"
+    };
+  }
+  const data = stageData(task, cell);
+  if (!data) return null;
+  const kindLabels = {
+    cw: "решено",
+    code: "код верный, тесты не прогнаны",
+    fail: "не решено",
+    infra: "сбой инфраструктуры",
+    run: cell.stalled ? "похоже на зависание" : "идёт",
+    stall: "похоже на зависание",
+    skipped: "не успел",
+    pending: "запланировано",
+    unknown: "нет данных"
+  };
+  const cls = data.kind !== "unknown" && Object.prototype.hasOwnProperty.call(kindLabels, data.kind)
+    ? data.kind
+    : "empty";
+  const lines = [task + " · " + data.icon + " " + (kindLabels[data.kind] || "нет данных")];
+  if (data.time && data.time !== "—") lines.push("время: " + data.time);
+  if (data.actions && data.actions !== "—") lines.push("действия: " + data.actions);
+  if (data.result) lines.push(data.result);
+  if (cell.title) lines.push(cell.title);
+  return {
+    cls: cls,
+    id: task,
+    min: cell.kind === "run" ? shortMinutes(data.time) : "",
+    title: lines.join("\n")
+  };
+}
+
+function cellSquare(task, cell, clickable) {
+  const info = squareInfo(task, cell);
+  if (!info) return "";
+  const open = clickable && cell && cell.transcript;
+  return '<span class="cell-square ' + esc(info.cls) + (open ? ' clickable' : '') + '"' +
+    (open ? ' data-transcript="' + esc(cell.transcript) + '" data-task="' + esc(task) + '" data-live="' + (cell.kind === "run" ? "1" : "") + '" role="button" tabindex="0"' : '') +
+    ' title="' + esc(info.title + (open ? "\nНажмите: задание и ответы модели" : "")) + '">' +
+    '<span class="sq-id">' + esc(info.id) + '</span>' +
+    (info.min ? '<span class="sq-min">' + esc(info.min) + '</span>' : '') +
+    '</span>';
+}
+
+function liveItemFor(row) {
+  // The running episode that belongs to this model row (same group, model and config), if any.
+  const items = (runningState && runningState.running) || [];
+  const cfg = String(row.config || "").split("/").pop().replace(/[^A-Za-z0-9_-]+/g, "-");
+  return items.find(function (it) {
+    if (!row.id || !it.group || row.id.indexOf(it.group + "|") !== 0) return false;
+    if (it.model !== row.model) return false;
+    return !(cfg && it.contest_raw && it.contest_raw.indexOf("-" + cfg + "-") < 0);
+  }) || null;
+}
+
+function liveDotHtml(row) {
+  return liveItemFor(row) ? '<span class="live-dot" title="Сейчас идёт прогон этой модели и конфига"></span>' : '';
+}
+
+function cellbarHtml(row, noClick) {
+  const cells = Object.assign({}, row.cells || {});
+  const live = liveItemFor(row);
+  if (live && (!cells[live.task] || cells[live.task].kind === "run")) {
+    cells[live.task] = Object.assign({}, cells[live.task] || {}, {
+      kind: "run", stalled: !!live.stalled, elapsed: live.elapsed_ru || live.elapsed,
+      transcript: (cells[live.task] && cells[live.task].transcript) || live.transcript,
+      title: "идёт · ход " + live.turn + " · " + (live.last_action_ru || live.last_action || "")
+    });
+  }
+  const tasks = (row.tasks || []).slice();
+  if (live && tasks.indexOf(live.task) < 0) tasks.push(live.task);
+  return tasks.map(function (task) {
+    return cellSquare(task, cells[task], !noClick);
+  }).join("");
+}
+
+function stageRow(task, cell) {
+  const data = stageData(task, cell);
+  if (!data) return "";
+  return '<tr class="stage ' + esc(data.kind) + '" data-task="' + esc(task) + '" title="' + esc(data.title) + '">' +
+    '<td class="stage-task mono">' + esc(task) + '</td>' +
+    '<td class="stage-icon">' + esc(data.icon) + '</td>' +
+    '<td class="stage-time mono">' + esc(data.time) + '</td>' +
+    '<td class="stage-actions">' + esc(data.actions) + '</td>' +
+    '<td class="stage-result">' + esc(data.result) + '</td>' +
+    '</tr>';
+}
+
+function updateStageRow(tr, task, cell) {
+  const data = stageData(task, cell);
+  if (!data) return;
+  tr.className = "stage " + data.kind;
+  tr.setAttribute("data-task", task);
+  tr.title = data.title;
+  setText(tr.querySelector(".stage-task"), task);
+  setText(tr.querySelector(".stage-icon"), data.icon);
+  setText(tr.querySelector(".stage-time"), data.time);
+  setText(tr.querySelector(".stage-actions"), data.actions);
+  setText(tr.querySelector(".stage-result"), data.result);
+}
+
+function modelBlock(c, row) {
+  const key = "m:" + row.id;
+  const open = isOpen(key, false);
+  let badges = "";
+  for (const badge of row.badges || []) {
+    badges += '<span class="row-badge">' + esc(badge) + '</span>';
+  }
+  let html = '<div class="model-block" data-model="' + esc(row.id) + '">' +
+    '<button type="button" class="model-head" data-model-toggle="' + esc(row.id) + '" aria-expanded="' + (open ? "true" : "false") + '" title="' + esc(row.title) + '">' +
+      '<span class="mlead">' +
+      '<span class="chev">' + (open ? "▾" : "▸") + '</span>' +
+      '<span data-dyn="livedot">' + liveDotHtml(row) + '</span>' +
+      '<span class="mname mono">' + esc(row.model) + '</span>' +
+      (row.show_config && row.config_short ? '<span class="mconfig mono">· ' + esc(row.config_short) + '</span>' : '') +
+      (!row.show_config && row.label && row.label !== row.model ? '<span class="rowlabel-mini">[' + esc(row.label) + ']</span>' : '') +
+      badges +
+      (row.winner ? '<span class="winner-mark" title="Победитель; предварительно">🏆</span><span class="provisional">предварительно</span>' : '') +
+      (row.incomplete ? '<span class="incomplete-note" title="Меньше задач, чем у других: не может победить">неполный</span>' : '') +
+      '</span>' +
+      '<span class="cellbar" data-dyn="cellbar">' + cellbarHtml(row) + '</span>' +
+      '<span class="mright">' +
+        '<span class="mcounts">' + esc(row.old_benchmark ? oldCountsLine(row.counts) : countsLine(row.counts)) + '</span>' +
+        '<span class="mtime mono">' + esc(row.wall_display) + '</span>' +
+      '</span>' +
+    '</button>' +
+    '<div class="stage-wrap"' + (open ? "" : " hidden") + '>';
+  if (!row.tasks.length) {
+    html += '<p class="muted small empty-note">Задач нет.</p>';
+  } else {
+    html += '<table class="stages"><tbody>';
+    for (const task of row.tasks) html += stageRow(task, row.cells[task]);
+    html += '</tbody></table>';
+  }
+  return html + '</div></div>';
+}
+
+function groupCardHtml(c) {
+  const key = "g:" + c.name;
+  const open = isOpen(key, c.live);
+  const typeLabel = c.category === "contest" ? "Конкурс" : "Тест модели";
+  let html = '<section class="group-card' + (c.live ? " live" : "") + '" data-group="' + esc(c.name) + '">' +
+    '<button type="button" class="group-head" data-group-toggle="' + esc(c.name) + '" aria-expanded="' + (open ? "true" : "false") + '" title="' + esc(c.title) + '">' +
+      '<span class="chev">' + (open ? "▾" : "▸") + '</span>' +
+      '<span class="gname">' + esc(c.name) + '</span>' +
+      '<span class="type-badge">' + typeLabel + '</span>' +
+      '<span class="level-badge">' + esc(c.level) + '</span>' +
+      '<span class="badge ' + esc(c.state_class) + '">' + esc(c.state_ru) + '</span>' +
+      '<span class="g-extras" data-dyn="g-extras">' + groupExtras(c) + '</span>' +
+      '<span class="gmeta">' + esc(groupMeta(c)) + '</span>' +
+      (c.service ? '<span class="service-badge">служебный</span>' : '') +
+    '</button>' +
+    '<div class="group-body"' + (open ? "" : " hidden") + '>';
+  const sections = sectionsOf(c);
+  if (!c.rows.length) {
+    html += '<p class="muted small empty-note">Эпизоды не найдены.</p>';
+  } else {
+    for (const section of sections) {
+      if (!section.rows || !section.rows.length) continue;
+      if (section.title) {
+        html += '<div class="section-head">' +
+          '<span class="section-title">' + esc(section.title) + '</span>' +
+          (section.winner_text ? '<span class="section-winner">' + esc(section.winner_text) + '</span>' +
+            '<span class="provisional">предварительно</span>' : '') +
+          (section.note ? '<span class="section-note">' + esc(section.note) + '</span>' : '') +
+          '</div>';
+      }
+      for (const row of section.rows) html += modelBlock(c, row);
+    }
+  }
+  return html + '</div></section>';
+}
+
+function oldCardHtml(test) {
+  const key = "o:" + test.id;
+  const open = isOpen(key, false);
+  let html = '<section class="group-card old-card" data-old="' + esc(test.id) + '">' +
+    '<button type="button" class="group-head" data-old-toggle="' + esc(test.id) + '" aria-expanded="' + (open ? "true" : "false") + '" title="' + esc(test.title) + '">' +
+      '<span class="chev">' + (open ? "▾" : "▸") + '</span>' +
+      '<span class="gname">' + esc(test.name) + '</span>' +
+      '<span class="type-badge">Тест модели</span>' +
+      '<span class="level-badge">' + esc(test.level) + '</span>' +
+      '<span class="old-badge">старый бенчмарк</span>' +
+      '<span class="test-result">' + esc(oldResult(test)) + '</span>' +
+      '<span class="gmeta">' + esc(test.models + " " + pluralRu(test.models, "модель", "модели", "моделей") + " · " + test.wall_display + " · обновлено " + test.updated_ago) + '</span>' +
+    '</button>' +
+    '<div class="group-body"' + (open ? "" : " hidden") + '>';
+  if (!test.rows.length) {
+    html += '<p class="muted small empty-note">Запросов нет.</p>';
+  } else {
+    for (const row of test.rows) html += modelBlock(test, row);
+  }
+  return html + '</div></section>';
+}
+
+function makeNode(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html.trim();
+  return template.content.firstElementChild;
+}
+
+function groupCard(c) {
+  return makeNode(groupCardHtml(c));
+}
+
+function oldCard(test) {
+  return makeNode(oldCardHtml(test));
+}
+
+function sectionsOf(c) {
+  return c.sections && c.sections.length
+    ? c.sections
+    : [{title: "", rows: c.rows || [], winner_text: "", note: ""}];
+}
+
+function allRowsOf(c) {
+  const rows = [];
+  for (const section of sectionsOf(c)) {
+    for (const row of section.rows || []) rows.push(row);
+  }
+  return rows;
+}
+
+function rowSignature(row) {
+  return {
+    id: row.id,
+    model: row.model,
+    config_short: row.config_short || "",
+    show_config: !!row.show_config,
+    label: row.label || "",
+    badges: row.badges || [],
+    winner: !!row.winner,
+    incomplete: !!row.incomplete,
+    old: !!row.old_benchmark,
+    tasks: row.tasks || []
+  };
+}
+
+function groupSignature(c) {
+  return JSON.stringify({
+    name: c.name,
+    level: c.level,
+    category: c.category,
+    service: !!c.service,
+    sections: sectionsOf(c).map(function (section) {
+      return {
+        title: section.title || "",
+        winner_text: section.winner_text || "",
+        note: section.note || "",
+        rows: (section.rows || []).map(rowSignature)
+      };
+    })
+  });
+}
+
+function oldSignature(test) {
+  return JSON.stringify({
+    id: test.id,
+    name: test.name,
+    level: test.level,
+    models: test.models,
+    rows: (test.rows || []).map(rowSignature)
+  });
+}
+
+function updateModelBlock(block, row, oldMode) {
+  setText(block.querySelector(".mcounts"),
+    (oldMode || row.old_benchmark) ? oldCountsLine(row.counts) : countsLine(row.counts));
+  setText(block.querySelector(".mtime"), row.wall_display);
+  setHtml(block.querySelector('[data-dyn="cellbar"]'), cellbarHtml(row));
+  setHtml(block.querySelector('[data-dyn="livedot"]'), liveDotHtml(row));
+  const head = block.querySelector(".model-head");
+  if (head && row.title) head.title = row.title;
+  const stages = {};
+  block.querySelectorAll("tr.stage").forEach(function (tr) {
+    stages[tr.getAttribute("data-task")] = tr;
+  });
+  const cells = row.cells || {};
+  for (const task of row.tasks || []) {
+    const tr = stages[task];
+    if (tr) updateStageRow(tr, task, cells[task]);
+  }
+}
+
+function updateGroupCard(card, c) {
+  card.classList.toggle("live", !!c.live);
+  const head = card.querySelector(".group-head");
+  if (head) {
+    if (c.title) head.title = c.title;
+    const badge = head.querySelector(".badge");
+    if (badge) {
+      badge.className = "badge " + (c.state_class || "unknown");
+      setText(badge, c.state_ru || "");
+    }
+    setText(head.querySelector(".type-badge"), c.category === "contest" ? "Конкурс" : "Тест модели");
+    setHtml(head.querySelector('[data-dyn="g-extras"]'), groupExtras(c));
+    setText(head.querySelector(".gmeta"), groupMeta(c));
+  }
+  const blocks = {};
+  card.querySelectorAll(".model-block").forEach(function (block) {
+    blocks[block.getAttribute("data-model")] = block;
+  });
+  for (const row of allRowsOf(c)) {
+    const block = blocks[row.id];
+    if (block) updateModelBlock(block, row, false);
+  }
+}
+
+function updateOldCard(card, test) {
+  const head = card.querySelector(".group-head");
+  if (head && test.title) head.title = test.title;
+  setText(card.querySelector(".test-result"), oldResult(test));
+  setText(card.querySelector(".gmeta"),
+    test.models + " " + pluralRu(test.models, "модель", "модели", "моделей") +
+    " · " + test.wall_display + " · обновлено " + test.updated_ago);
+  const blocks = {};
+  card.querySelectorAll(".model-block").forEach(function (block) {
+    blocks[block.getAttribute("data-model")] = block;
+  });
+  for (const row of test.rows || []) {
+    const block = blocks[row.id];
+    if (block) updateModelBlock(block, row, true);
+  }
+}
+
+const interactionUntil = new WeakMap();
+const hoveredCards = new WeakSet();
+
+function cardOf(node) {
+  return node && node.closest ? node.closest(".group-card") : null;
+}
+
+function markInteraction(node) {
+  const card = cardOf(node);
+  if (card) interactionUntil.set(card, Date.now() + 2500);
+}
+
+function isProtected(card) {
+  if (!card) return false;
+  if (hoveredCards.has(card)) return true;
+  return Date.now() < (interactionUntil.get(card) || 0);
+}
+
+document.addEventListener("pointerover", function (event) {
+  const card = cardOf(event.target);
+  if (!card) return;
+  hoveredCards.add(card);
+  interactionUntil.set(card, Date.now() + 2500);
+}, true);
+
+document.addEventListener("pointerout", function (event) {
+  const card = cardOf(event.target);
+  if (!card) return;
+  const to = event.relatedTarget;
+  if (to && card.contains(to)) return;
+  hoveredCards.delete(card);
+}, true);
+
+document.addEventListener("focusin", function (event) {
+  markInteraction(event.target);
+}, true);
+
+function reconcile(container, items, attr, keyOf, build, signatureOf, update, emptyText) {
+  const existing = new Map();
+  Array.from(container.children).forEach(function (el) {
+    if (el.hasAttribute(attr)) existing.set(el.getAttribute(attr), el);
+  });
+  const placeholder = container.querySelector(":scope > [data-empty]");
+  if (!items.length) {
+    existing.forEach(function (el) { el.remove(); });
+    if (!placeholder) {
+      const note = document.createElement("p");
+      note.className = "muted empty-note";
+      note.setAttribute("data-empty", "");
+      note.textContent = emptyText || "Нет данных.";
+      container.appendChild(note);
+    } else {
+      placeholder.textContent = emptyText || "Нет данных.";
+    }
+    return;
+  }
+  if (placeholder) placeholder.remove();
+
+  let previous = null;
+  for (const item of items) {
+    const key = keyOf(item);
+    const signature = signatureOf(item);
+    let el = existing.get(key) || null;
+    if (el) existing.delete(key);
+    if (!el) {
+      el = build(item);
+      el.setAttribute(attr, key);
+      el.setAttribute("data-sig", signature);
+    } else if (el.getAttribute("data-sig") !== signature) {
+      if (!isProtected(el)) {
+        const fresh = build(item);
+        fresh.setAttribute(attr, key);
+        fresh.setAttribute("data-sig", signature);
+        el.replaceWith(fresh);
+        el = fresh;
+      }
+    } else if (!isProtected(el)) {
+      update(el, item);
+      el.setAttribute("data-sig", signature);
+    }
+    if (previous) {
+      if (previous.nextSibling !== el) previous.after(el);
+    } else if (container.firstChild !== el) {
+      container.insertBefore(el, container.firstChild);
+    }
+    previous = el;
+  }
+  existing.forEach(function (el) { el.remove(); });
+  Array.from(container.children).forEach(function (el) {
+    if (!el.hasAttribute(attr)) el.remove();
+  });
+}
+
+let runningState = null;
+
+function runningCards(items) {
+  if (!items.length) return '<p class="muted">Ничего не выполняется.</p>';
+  let html = '';
+  for (const item of items) {
+    const contests = (runningState && runningState.contests) || [];
+    const contest = contests.find(function (c) { return c.name === item.contest_raw; }) || null;
+    const row = contest ? (contest.rows.find(function (r) { return r.model === item.model; }) || contest.rows[0]) : null;
+    const bar = contest && row ? cellbarHtml({ tasks: contest.tasks || [], cells: row.cells || {} }, true) : '';
+    const write = (item.last_write_ago_ru || item.last_write_ago || "—") +
+      (item.stalled ? ' <span class="stall-badge">🛑 похоже на зависание</span>' : '');
+    html += '<div class="run-card">' +
+      '<div class="run-title"><b>' + esc(item.short_group || item.contest) + '</b> · <span class="mono">' +
+        esc(item.model) + '</span> · задача <b>' + esc(item.task) + '</b></div>' +
+      '<span class="cellbar big">' + bar + '</span>' +
+      '<div class="run-meta">ход ' + esc(item.turn) + ' · прошло ' + esc(item.elapsed_ru || item.elapsed) +
+        ' · последнее действие: ' + esc(item.last_action_ru || item.last_action || "—") +
+        ' · последняя запись: ' + write +
+        (item.last_tool_error ? ' · <span class="toolerror" title="' + esc(item.last_tool_error) + '">ошибка: ' +
+          esc(item.last_tool_error.slice(0, 120)) + '</span>' : '') +
+      '</div></div>';
+  }
+  return html;
+}
+
+let detailTimer = null;
+let detailOpenKey = null;   // transcript shown in the panel; a second click on the same square closes it
+
+function closeDetail() {
+  document.getElementById("detail-panel").classList.add("hidden");
+  if (detailTimer) { clearInterval(detailTimer); detailTimer = null; }
+  detailOpenKey = null;
+}
+
+function renderDetail(d, task) {
+  const verdict = !d.finished ? "⏳ идёт" : (d.workflow_pass ? "✅ решено и проверено" : (d.code_pass ? "🟡 код верный, без проверки" : "❌ не решено"));
+  let html = '<h3>Задание</h3><pre>' + esc(d.task || "(TASK.md не найден)") + '</pre><h3>Ходы модели</h3>';
+  if (d.turns_total > d.turns.length) html += '<p class="muted small">показаны последние ' + d.turns.length + ' из ' + d.turns_total + '</p>';
+  for (const t of d.turns) {
+    html += '<div class="detail-turn"><div class="t-head">Ход ' + esc(t.turn) + ' · <b>' + esc(t.action || "?") + '</b>' +
+      (t.path ? ' <span class="mono">' + esc(t.path) + '</span>' : '') +
+      (t.tokens ? ' <span class="muted small">· ' + esc(t.tokens) + ' ток.</span>' : '') + '</div>';
+    if (t.thinking) html += '<details><summary>размышления (' + t.thinking.length + ' симв.)</summary><pre>' + esc(t.thinking) + '</pre></details>';
+    if (t.code) html += '<pre>' + esc(t.code) + '</pre>';
+    if (t.report) html += '<pre>' + esc(t.report) + '</pre>';
+    if (t.raw) html += '<pre>' + esc(t.raw) + '</pre>';
+    if (t.result) html += '<details' + (t.result_ok ? '' : ' open') + '><summary>ответ инструмента' + (t.result_ok ? '' : ' (ошибка)') +
+      '</summary><pre class="' + (t.result_ok ? '' : 'res-bad') + '">' + esc(t.result) + '</pre></details>';
+    html += '</div>';
+  }
+  if (d.waiting) html += '<div class="detail-wait">⏳ модель генерирует ход ' + esc(d.waiting.turn) + '… ' + esc(d.waiting.seconds) +
+    ' с. Ответ появится целиком, когда ход закончится (запускатель получает ответы не по токенам).</div>';
+  return {head: '<b>' + esc(task) + '</b><span>' + esc(verdict) + '</span><span class="muted small">ходов: ' + esc(d.turns_total) + '</span>', body: html};
+}
+
+function openDetail(token, task, live) {
+  const panel=document.getElementById('detail-panel');
+  const d=(lastState && lastState.public_details || {})[token] || {};
+  panel.classList.remove('hidden');
+  panel.querySelector('.detail-head .h').innerHTML='<b>'+esc(task)+'</b><span>'+esc(d.title || 'Snapshot result')+'</span>';
+  panel.querySelector('.detail-body').innerHTML='<h3>Result summary</h3><p><b>Model: </b>'+esc(d.model || '—')+
+    '</p><p><b>Configuration: </b>'+esc(d.config || '—')+'</p><p><b>Time: </b>'+esc(d.wall_display || d.elapsed || '—')+
+    '</p><p><b>Tool calls: </b>'+esc(d.tool_calls === undefined ? '—' : d.tool_calls)+
+    '</p><p class="muted">Hourly snapshot. Personal paths and sensitive strings are redacted. Loading task and model turns…</p>';
+  if (d.has_episode) {
+    fetch('/data/episodes/'+encodeURIComponent(token)+'.json', {cache:'no-store'}).then(r=>{
+      if(!r.ok) throw new Error('HTTP '+r.status); return r.json();
+    }).then(episode=>{
+      if(panel.classList.contains('hidden') || detailOpenKey !== token) return;
+      const view=renderDetail(episode,task);
+      panel.querySelector('.detail-head .h').innerHTML=view.head;
+      panel.querySelector('.detail-body').innerHTML='<p class="muted">Hourly snapshot · paths and sensitive strings redacted.</p>'+view.body;
+    }).catch(e=>{panel.querySelector('.detail-body').appendChild(el('p','warn','Could not load episode: '+e.message));});
+  } else {
+    panel.querySelector('.detail-body').appendChild(el('p','muted','No model transcript is available for this cell.'));
+  }
+}
+
+document.addEventListener("click", function (e) {
+  const sq = e.target.closest && e.target.closest(".cell-square.clickable");
+  if (sq) {
+    e.preventDefault(); e.stopPropagation();
+    const key = sq.getAttribute("data-transcript");
+    if (key === detailOpenKey) { closeDetail(); return; }
+    openDetail(key, sq.getAttribute("data-task"), sq.getAttribute("data-live") === "1");
+    detailOpenKey = key;
+    return;
+  }
+  if (e.target.closest && e.target.closest("#detail-panel [data-close]")) closeDetail();
+}, true);
+document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeDetail(); });
+
+function runningTable(items) {
+  if (!items.length) return '<p class="muted">Ничего не выполняется.</p>';
+  let html = '<div class="card scroll" data-scroll-key="running"><table><thead><tr>' +
+    '<th>Конкурс</th><th>Модель</th><th>Задача</th><th>Ход</th><th>Прошло</th>' +
+    '<th>Последнее действие</th><th>Ошибка инструмента</th><th>Последняя запись</th>' +
+    '</tr></thead><tbody>';
+  for (const item of items) {
+    const contest = item.label && item.label !== "(self)"
+      ? esc(item.contest) + ' <span class="muted small">[' + esc(item.label) + ']</span>'
+      : esc(item.contest);
+    const lastWrite = item.stalled
+      ? '<span class="warn stalled-text">' + esc(item.last_write_ago_ru || item.last_write_ago) + '</span>' +
+        '<span class="stall-badge" title="Журнал молчит больше 10 мин. Долгая генерация может быть нормальной; это подсказка, а не приговор.">🛑 похоже на зависание</span>'
+      : esc(item.last_write_ago_ru || item.last_write_ago);
+    const actionTitle = "Последнее событие: " + (item.last_event || "—") +
+      (item.last_action && item.last_action !== item.last_action_ru ? "; действие: " + item.last_action : "");
+    const elapsedTitle = "Прошло " + item.elapsed_seconds + " с; старт: " + (item.started_at || item.started_ago_ru || item.started_ago);
+    const writeTitle = "Последняя запись " + item.last_write_seconds + " с назад" + (item.last_write_at ? "; " + item.last_write_at : "");
+    html += '<tr>' +
+      '<td>' + contest + '</td>' +
+      '<td class="mono">' + esc(item.model) + '</td>' +
+      '<td>' + esc(item.task) + '</td>' +
+      '<td class="mono">' + esc(item.turn) + '</td>' +
+      '<td class="mono" title="' + esc(elapsedTitle) + '">' + esc(item.elapsed_ru || item.elapsed) + '</td>' +
+      '<td class="action" title="' + esc(actionTitle) + '">' + esc(item.last_action_ru || item.last_action) + '</td>' +
+      '<td class="toolerror" title="' + esc(item.last_tool_error) + '">' +
+        (item.last_tool_error ? esc(item.last_tool_error.slice(0, 160)) : "—") + '</td>' +
+      '<td class="mono" title="' + esc(writeTitle) + '">' + lastWrite + '</td>' +
+      '</tr>';
+  }
+  return html + '</tbody></table></div>';
+}
+
+let runningSignature = null;
+
+function runningItemsSignature(items) {
+  return JSON.stringify(items.map(function (item) {
+    return [
+      item.contest, item.label, item.model, item.task, item.turn, item.elapsed,
+      item.stalled, item.last_action, item.last_write_ago, item.last_tool_error
+    ];
+  }));
+}
+
+function updateRunning(items) {
+  const box = document.getElementById("running");
+  if (!items.length) {
+    if (box.firstChild) box.replaceChildren();
+    runningSignature = "[]";
+    return;
+  }
+  if (box.matches(":hover")) return;
+  const signature = runningItemsSignature(items);
+  if (signature === runningSignature) return;
+  box.innerHTML = runningCards(items);
+  runningSignature = signature;
+}
+
+function updateNow(state) {
+  const title = document.getElementById("now-title");
+  const line = document.getElementById("now-line");
+  const items = visibleRunning(state);
+  runningState = state;
+  setText(title, "At last hourly snapshot");
+  if (items.length) {
+    setText(line, summaryLine(state));
+    line.title = summaryTitle(state);
+  } else if (state.last_run) {
+    setText(line, state.last_run.text || "Последний прогон: нет данных");
+    line.title = state.last_run.error
+      ? state.last_run.text + "\n" + state.last_run.error
+      : (state.last_run.text || "");
+  } else {
+    setText(line, "Последний прогон: нет данных");
+    line.title = "";
+  }
+  updateRunning(items);
+}
+
+function updateTabs(state) {
+  const contestGroups = groupsFor(state, "contest");
+  const testGroups = groupsFor(state, "test");
+  const oldTests = state.old_benchmarks || [];
+  document.getElementById("tab-contest-count").textContent = " (" + contestGroups.length + ")";
+  document.getElementById("tab-test-count").textContent = " (" + (testGroups.length + oldTests.length) + ")";
+  const active = selectedCategory;
+  document.querySelectorAll("#tabs .tab").forEach(function (btn) {
+    btn.classList.toggle("active", btn.getAttribute("data-category") === active);
+  });
+  const contestDot = document.getElementById("tab-contest-dot");
+  const testDot = document.getElementById("tab-test-dot");
+  contestDot.classList.toggle("hidden", active === "contest" || !contestGroups.some(function (c) { return c.live; }));
+  testDot.classList.toggle("hidden", active === "test" || !testGroups.some(function (c) { return c.live; }));
+}
+
+function updateServiceCount(state) {
+  const hidden = state.groups.filter(function (c) { return c.service; }).length;
+  document.getElementById("service-count").textContent = hidden ? "(" + hidden + ")" : "";
+}
+
+let conclusionsSig = null;
+const SIZE_TITLE = {"XS": "SuperLight", "S": "Light", "M": "Medium", "L": "High", "C++": "C++"};
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined && text !== null) e.textContent = text;
+  return e;
+}
+
+function fmtSec(v) {
+  if (v === null || v === undefined) return "—";
+  if (v < 1) return v.toFixed(2) + " с";
+  if (v < 120) return Math.round(v) + " с";
+  return (v / 60).toFixed(1) + " мин";
+}
+
+function pctClass(p) {   // 95+ green, 80-95 light green, 65-80 yellow, 50-65 orange, <50 red
+  return p >= 95 ? "p95" : p >= 80 ? "p80" : p >= 65 ? "p65" : p >= 50 ? "p50" : "p0";
+}
+
+function renderConclusions(cc) {
+  cc = localizedConclusions(cc);
+  const sig = JSON.stringify(cc);
+  if (sig === conclusionsSig) return;          // nothing changed: keep scroll and selection
+  conclusionsSig = sig;
+  const root = document.getElementById("conclusions");
+  root.replaceChildren();
+
+  root.appendChild(el("h2", null, "Распределение по ролям"));
+  const roles = el("table", "cc-roles");
+  for (const r of cc.roles || []) {
+    const tr = el("tr");
+    tr.appendChild(el("td", null, r.size));
+    tr.appendChild(el("td", null, r.contest));
+    const tags = el("td");
+    (r.tags || []).forEach(function (t, i) { if (i) tags.appendChild(document.createTextNode(" ")); tags.appendChild(el("code", null, t)); });
+    if (!(r.tags || []).length) tags.textContent = "—";
+    tr.appendChild(tags);
+    tr.appendChild(el("td", "muted", r.status));
+    roles.appendChild(tr);
+  }
+  root.appendChild(roles);
+
+  root.appendChild(el("h2", null, "Модели"));
+  root.appendChild(el("p", "cc-note",
+    "Успех: для XS/S/M — доля верного кода (✅ + 🟡), для L и C++ — доля решённого и проверенного самой моделью (✅). " +
+    "Тесты — все эпизоды и запросы по всем конфигам модели (без сбоев стенда: HTTP 400/500). Скорость — среднее время " +
+    "на задачу против среднего по моделям того же класса: меньше 1× быстрее одноклассников. Conclusions are maintained by the benchmark owner" +
+    (cc.updated ? " (обновлено " + cc.updated + ")." : ".")));
+  const grid = el("div", "cc-grid");
+  for (const m of cc.models || []) {
+    const card = el("div", "cc-card" + (m.verdict ? "" : " other"));
+    const head = el("div", "cc-head");
+    head.appendChild(el("span", "cc-name", m.name));
+    (m.roles || []).forEach(function (r) { head.appendChild(el("span", "cc-chip", r)); });
+    const st = m.status === "confirmed" ? ["confirmed", "подтверждено"] : m.status === "preliminary" ? ["preliminary", "предварительно"] : ["none", "без выводов"];
+    head.appendChild(el("span", "cc-badge " + st[0], st[1]));
+    card.appendChild(head);
+    if (m.verdict) card.appendChild(el("p", "cc-verdict", m.verdict));
+    [["Давать", m.give], ["Не давать", m.avoid], ["Слабые места", m.weak]].forEach(function (kv) {
+      if (!kv[1] || kv[1] === "—") return;
+      const p = el("p", "cc-kv"); p.appendChild(el("b", null, kv[0] + ": ")); p.appendChild(document.createTextNode(kv[1])); card.appendChild(p);
+    });
+    if ((m.classes || []).length) {
+      const t = el("table", "cc-stats");
+      const h = el("tr");
+      ["Класс", "Тестов", "Успех", "Время/задача", "Против класса"].forEach(function (x) { h.appendChild(el("th", null, x)); });
+      t.appendChild(h);
+      for (const c of m.classes) {
+        const tr = el("tr");
+        tr.appendChild(el("td", null, c.size + " · " + (SIZE_TITLE[c.size] || "")));
+        tr.appendChild(el("td", null, String(c.tests)));
+        // XS/S/M: share of correct code (owner 2026-10-28); L/C++ and above: self-verified share
+        const pct = Math.round(100 * (["XS", "S", "M"].includes(c.size) ? c.code_pass : c.full_pass) / c.tests);
+        tr.appendChild(el("td", "cc-pct " + pctClass(pct), pct + "%"));
+        tr.appendChild(el("td", null, fmtSec(c.avg_seconds)));
+        const r = c.speed_ratio;
+        tr.appendChild(el("td", r === null ? "" : r <= 0.9 ? "cc-fast" : r >= 1.1 ? "cc-slow" : "", r === null ? "—" : r.toFixed(2) + "×"));
+        t.appendChild(tr);
+      }
+      card.appendChild(t);
+    } else {
+      card.appendChild(el("p", "cc-kv", "Тестов пока нет."));
+    }
+    grid.appendChild(card);
+  }
+  root.appendChild(grid);
+}
+
+function render(state, preserve) {
+  const saved = preserve ? captureScroll() : null;
+  lastState = state;
+  selectedCategory = pickCategory(state);
+
+  document.getElementById("meta").textContent =
+    "обновлено " + state.generated_at + " · hourly public snapshot · read only";
+  document.getElementById("ollama-line").textContent =
+    state.ollama.summary || "Ollama: нет данных";
+
+  updateNow(state);
+  updateServiceCount(state);
+  updateTabs(state);
+
+  const showConclusions = selectedCategory === "conclusions";
+  document.getElementById("groups").hidden = showConclusions;
+  document.getElementById("conclusions").hidden = !showConclusions;
+  const cc = state.conclusions || {models: []};
+  document.getElementById("tab-conclusions-count").textContent = " (" + cc.models.filter(function (m) { return m.verdict; }).length + ")";
+  if (showConclusions) renderConclusions(cc);
+  const groups = showConclusions ? [] : groupsFor(state, selectedCategory);
+  const emptyGroupText = selectedCategory === "contest"
+    ? "Нет конкурсов за последние 24 часа."
+    : "Нет тестов моделей за последние 24 часа.";
+  reconcile(
+    document.getElementById("groups"), groups, "data-group",
+    function (c) { return c.name; },
+    groupCard, groupSignature, updateGroupCard, emptyGroupText
+  );
+
+  const oldTests = state.old_benchmarks || [];
+  const oldTitle = document.getElementById("old-title");
+  const oldNote = document.getElementById("old-note");
+  const oldList = document.getElementById("old-list");
+  if (selectedCategory === "test" && oldTests.length) {
+    oldTitle.hidden = false;
+    oldNote.hidden = false;
+    setText(oldTitle, "Старый бенчмарк (" + oldTests.length + ")");
+    reconcile(
+      oldList, oldTests, "data-old",
+      function (test) { return test.id; },
+      oldCard, oldSignature, updateOldCard, "Запросов нет."
+    );
+  } else {
+    oldTitle.hidden = true;
+    oldNote.hidden = true;
+    if (oldList.firstChild) oldList.replaceChildren();
+  }
+
+  restoreScroll(saved);
+  requestAnimationFrame(function () { restoreScroll(saved); });
+}
+
+async function tick() {
+  const banner = document.getElementById("error");
+  try {
+    const response = await fetch("/data/state.json", {cache: "no-store"});
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const state = await response.json();
+    if (state.error) throw new Error(state.error);
+    render(state, !firstRender);
+    firstRender = false;
+    banner.classList.add("hidden");
+    banner.textContent = "";
+  } catch (err) {
+    banner.textContent = "Обновление не удалось: " + err;
+    banner.classList.remove("hidden");
+  }
+}
+
+document.addEventListener("click", function (event) {
+  markInteraction(event.target);
+  const oldHead = event.target.closest(".old-card .group-head");
+  if (oldHead) {
+    const card = oldHead.closest(".old-card");
+    const testId = oldHead.getAttribute("data-old-toggle");
+    if (!card || !testId) return;
+    const open = oldHead.getAttribute("aria-expanded") !== "true";
+    oldHead.setAttribute("aria-expanded", open ? "true" : "false");
+    const chev = oldHead.querySelector(".chev");
+    if (chev) chev.textContent = open ? "▾" : "▸";
+    const body = card.querySelector(".group-body");
+    if (body) body.hidden = !open;
+    setOpen("o:" + testId, open);
+    return;
+  }
+  const groupHead = event.target.closest("#groups .group-head");
+  if (groupHead) {
+    const card = groupHead.closest(".group-card");
+    const name = groupHead.getAttribute("data-group-toggle");
+    if (!card || !name) return;
+    const open = groupHead.getAttribute("aria-expanded") !== "true";
+    groupHead.setAttribute("aria-expanded", open ? "true" : "false");
+    const chev = groupHead.querySelector(".chev");
+    if (chev) chev.textContent = open ? "▾" : "▸";
+    const body = card.querySelector(".group-body");
+    if (body) body.hidden = !open;
+    setOpen("g:" + name, open);
+    return;
+  }
+  const modelHead = event.target.closest(".model-head");
+  if (modelHead) {
+    const block = modelHead.closest(".model-block");
+    const rowId = modelHead.getAttribute("data-model-toggle");
+    if (!block || !rowId) return;
+    const open = modelHead.getAttribute("aria-expanded") !== "true";
+    modelHead.setAttribute("aria-expanded", open ? "true" : "false");
+    const chev = modelHead.querySelector(".chev");
+    if (chev) chev.textContent = open ? "▾" : "▸";
+    const body = block.querySelector(".stage-wrap");
+    if (body) body.hidden = !open;
+    setOpen("m:" + rowId, open);
+  }
+});
+
+document.getElementById("tabs").addEventListener("click", function (event) {
+  const button = event.target.closest(".tab");
+  if (!button) return;
+  const category = button.getAttribute("data-category");
+  if (category !== "contest" && category !== "test" && category !== "conclusions") return;
+  selectedCategory = category;
+  try { localStorage.setItem(CATEGORY_KEY, category); } catch (err) {}
+  if (lastState) render(lastState, true);
+});
+
+const serviceCheckbox = document.getElementById("show-service");
+serviceCheckbox.checked = showService;
+serviceCheckbox.addEventListener("change", function () {
+  showService = serviceCheckbox.checked;
+  try { localStorage.setItem(SERVICE_KEY, showService ? "1" : "0"); } catch (err) {}
+  if (lastState) render(lastState, true);
+});
+
+tick();
+setInterval(tick, REFRESH_MS);
+</script>
+</body>
+</html>
