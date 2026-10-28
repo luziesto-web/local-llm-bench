@@ -78,11 +78,11 @@ the files the model wrote; time = wall-clock minutes per episode.
 | gemma4-e2b | 25/92 (27%) | 0.2 | — | — | — | — |
 | qwen3.5-9b | — | — | 35/60 (58%) | 1.5 | 20/29 (69%) | 3.8 |
 | granite4.2-8b | — | — | 50/88 (57%) | 1.0 | — | — |
-| k2-horizon-7b-q5 | — | — | 36/41 (88%) | 2.7 | 23/27 (85%) | 2.3 |
+| k2-horizon-7b-q5 | — | — | 36/41 (88%) | 2.7 | 24/28 (86%) | 2.3 |
 | nemotron-3.5-lightning-30b | — | — | — | — | 21/30 (70%) | 3.5 |
 | glm-4.7-flash | — | — | — | — | 15/29 (52%) | 2.1 |
 | gpt-oss-20b | — | — | 0/4 (0%) | 1.6 | 19/21 (90%) | 4.4 |
-| qwen3-coder-30b | — | — | — | — | 11/24 (46%) | 2.1 |
+| qwen3-coder-30b | — | — | — | — | 12/25 (48%) | 2.1 |
 | qwen3.5-0.8b | 3/17 (18%) | 0.2 | — | — | — | — |
 | k2-horizon-7b-q4 | — | — | 5/13 (38%) | 0.7 | — | — |
 | bonsai-2-9b | — | — | 2/5 (40%) | 1.0 | — | — |
@@ -96,9 +96,9 @@ the files the model wrote; time = wall-clock minutes per episode.
 - **Models so far**: Gemma 4 (E2B/E4B), Qwen 3.5 (4B/9B), Qwen3-Coder 30B, Granite 4.2, gpt-oss 20B,
   Nemotron 3.5 Lightning 30B, GLM 4.7 Flash, K2-Horizon 7B.
 - **Results**: `runs/<run>/results.jsonl` - one line per episode (model, config, options, task, seed, code_pass,
-  time, token use). Full model transcripts are not published.
+  time, token use). The dashboard provides redacted task conditions and clipped model reasoning, responses and tool calls. Repeated request histories and local paths stay private.
 
 **How this was built**: the code was written by AI coding agents (Claude, ChatGPT/Codex) under my direction; the
 task ladder, the method, the decisions and the conclusions are mine.
 
-Updated hourly while runs are active. Last update: 2026-10-28 22:00 UTC.
+Updated hourly while runs are active. Last update: 2026-10-28 22:02 UTC.
