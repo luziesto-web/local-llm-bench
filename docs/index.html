@@ -511,13 +511,21 @@ let dashboardLanguage = 'en';
 try { dashboardLanguage = new URLSearchParams(location.search).get('lang') || localStorage.getItem('dashboard.language') || 'en'; } catch (_) {}
 if (!['en','ru'].includes(dashboardLanguage)) dashboardLanguage = 'en';
 const translationKeys = Object.keys(DASHBOARD_TRANSLATIONS).sort((a,b)=>b.length-a.length);
+// Built ONCE (2026-10-28: it used to be rebuilt for every text node on every mutation -> 2 s freezes per refresh).
+const TRANSLATION_PATTERN = translationKeys.length ? new RegExp(translationKeys.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'),'g') : null;
+const TRANSLATION_MEMO = new Map();
+const HAS_CYRILLIC = /[А-Яа-яЁё]/;
 function dashboardTranslate(value) {
   let text = String(value);
-  if (dashboardLanguage === 'ru') return text;
+  if (dashboardLanguage === 'ru' || !HAS_CYRILLIC.test(text)) return text;
+  const hit = TRANSLATION_MEMO.get(text);
+  if (hit !== undefined) return hit;
   // A single pass avoids translating words inside an already translated phrase.
-  const pattern = new RegExp(translationKeys.map(x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'),'g');
-  text = text.replace(pattern, x=>DASHBOARD_TRANSLATIONS[x]);
-  return text.replace(/(\d+(?:[.,]\d+)?)\s*ч(?=\d|\s|$)/g,'$1 h ').replace(/(\d+(?:[.,]\d+)?)\s*мин(?=\s|$)/g,'$1 min').replace(/(\d+(?:[.,]\d+)?)м(?=\d|\s|$)/g,'$1m ').replace(/(\d+(?:[.,]\d+)?)\s*с(?=\s|$)/g,'$1 s');
+  let out = TRANSLATION_PATTERN ? text.replace(TRANSLATION_PATTERN, x=>DASHBOARD_TRANSLATIONS[x]) : text;
+  out = out.replace(/(\d+(?:[.,]\d+)?)\s*ч(?=\d|\s|$)/g,'$1 h ').replace(/(\d+(?:[.,]\d+)?)\s*мин(?=\s|$)/g,'$1 min').replace(/(\d+(?:[.,]\d+)?)м(?=\d|\s|$)/g,'$1m ').replace(/(\d+(?:[.,]\d+)?)\s*с(?=\s|$)/g,'$1 s');
+  if (TRANSLATION_MEMO.size > 20000) TRANSLATION_MEMO.clear();
+  TRANSLATION_MEMO.set(text, out);
+  return out;
 }
 function localizedConclusions(cc) {
   if (dashboardLanguage === 'ru') return cc;
@@ -528,6 +536,38 @@ function localizedConclusions(cc) {
 const textHistory = new WeakMap();
 const attrHistory = new WeakMap();
 let translatingDashboard = false;
+function translateTextNode(node) {
+  const parent = node.parentElement;
+  if (!parent || parent.closest('script,style,pre,code,textarea,[data-no-translate]')) return;
+  const old=textHistory.get(node);
+  if (old && node.nodeValue===old.rendered && old.lang===dashboardLanguage) return;   // already done
+  const original=old && node.nodeValue===old.rendered ? old.original : node.nodeValue;
+  const rendered=dashboardTranslate(original);
+  textHistory.set(node,{original,rendered,lang:dashboardLanguage});
+  if (node.nodeValue!==rendered) node.nodeValue=rendered;
+}
+function translateAttrs(el) {
+  const history=attrHistory.get(el)||{};
+  ['title','aria-label','placeholder'].forEach(key=>{
+    if (!el.hasAttribute(key)) return;
+    const value=el.getAttribute(key), old=history[key];
+    const original=old && value===old.rendered ? old.original : value;
+    const rendered=dashboardTranslate(original);
+    history[key]={original,rendered};
+    if(value!==rendered) el.setAttribute(key,rendered);
+  });
+  attrHistory.set(el,history);
+}
+function translateSubtree(root) {
+  if (!root) return;
+  if (root.nodeType === Node.TEXT_NODE) { translateTextNode(root); return; }
+  if (root.nodeType !== Node.ELEMENT_NODE) return;
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node=walker.nextNode())) translateTextNode(node);
+  if (root.matches && root.matches('[title],[aria-label],[placeholder]')) translateAttrs(root);
+  root.querySelectorAll && root.querySelectorAll('[title],[aria-label],[placeholder]').forEach(translateAttrs);
+}
 function translateDashboardDOM() {
   if (translatingDashboard) return;
   translatingDashboard = true;
@@ -535,14 +575,7 @@ function translateDashboardDOM() {
     document.documentElement.lang=dashboardLanguage;
     const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
     let node;
-    while ((node=walker.nextNode())) {
-      if (node.parentElement.closest('script,style,pre,code,textarea,[data-no-translate]')) continue;
-      const old=textHistory.get(node);
-      const original=old && node.nodeValue===old.rendered ? old.original : node.nodeValue;
-      const rendered=dashboardTranslate(original);
-      textHistory.set(node,{original,rendered});
-      if (node.nodeValue!==rendered) node.nodeValue=rendered;
-    }
+    while ((node=walker.nextNode())) translateTextNode(node);
     document.querySelectorAll('[title],[aria-label],[placeholder]').forEach(el=>{
       const history=attrHistory.get(el)||{};
       ['title','aria-label','placeholder'].forEach(key=>{
@@ -566,8 +599,18 @@ document.addEventListener('DOMContentLoaded',()=>{
     const url=new URL(location.href);url.searchParams.set('lang',dashboardLanguage);history.replaceState(null,'',url);
     conclusionsSig=null;if(lastState)render(lastState,true);translateDashboardDOM();
   });
-  let pending=false;
-  new MutationObserver(()=>{if(!pending){pending=true;queueMicrotask(()=>{pending=false;translateDashboardDOM();});}}).observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','aria-label','placeholder']});
+  // Only the nodes that changed are translated (a full-document pass on every refresh froze the page).
+  new MutationObserver(records=>{
+    if (translatingDashboard) return;
+    translatingDashboard = true;
+    try {
+      for (const r of records) {
+        if (r.type === 'childList') r.addedNodes.forEach(translateSubtree);
+        else if (r.type === 'characterData') translateTextNode(r.target);
+        else if (r.type === 'attributes') translateAttrs(r.target);
+      }
+    } finally { translatingDashboard = false; }
+  }).observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','aria-label','placeholder']});
   translateDashboardDOM();
 });
 
@@ -603,6 +646,8 @@ try {
 let showService = false;
 try { showService = localStorage.getItem(SERVICE_KEY) === "1"; } catch (err) {}
 let lastState = null;
+const SIG_MEMO = new WeakMap();      // data object -> its signature (objects are reused across delta merges)
+const RENDERED_ITEM = new WeakMap(); // DOM card -> the data object it was last drawn from
 let firstRender = true;
 
 function saveTree() {
@@ -1245,9 +1290,20 @@ function reconcile(container, items, attr, keyOf, build, signatureOf, update, em
   let previous = null;
   for (const item of items) {
     const key = keyOf(item);
-    const signature = signatureOf(item);
+    // archive objects survive a delta merge unchanged: reuse their signature and skip their update entirely
+    let signature = SIG_MEMO.get(item);
+    if (signature === undefined) { signature = signatureOf(item); SIG_MEMO.set(item, signature); }
     let el = existing.get(key) || null;
     if (el) existing.delete(key);
+    if (el && RENDERED_ITEM.get(el) === item) {
+      if (previous) {
+        if (previous.nextSibling !== el) previous.after(el);
+      } else if (container.firstChild !== el) {
+        container.insertBefore(el, container.firstChild);
+      }
+      previous = el;
+      continue;
+    }
     if (!el) {
       el = build(item);
       el.setAttribute(attr, key);
@@ -1264,6 +1320,7 @@ function reconcile(container, items, attr, keyOf, build, signatureOf, update, em
       update(el, item);
       el.setAttribute("data-sig", signature);
     }
+    if (!isProtected(el)) RENDERED_ITEM.set(el, item);
     if (previous) {
       if (previous.nextSibling !== el) previous.after(el);
     } else if (container.firstChild !== el) {
@@ -1565,12 +1622,13 @@ function renderOverview(stats) {
   if(!stats) { root.hidden=true; return; }
   root.hidden=false;
   const cards=[['Всего завершено',stats.total],['Решено (✅ + 🟡)',stats.solved],['Не решено (❌)',stats.failed],['Сбои стенда (⚠️)',stats.infra]];
-  root.innerHTML='<h2>Общий итог тестов</h2><div class="overview-grid">'+cards.map(c=>
+  const html='<h2>Общий итог тестов</h2><div class="overview-grid">'+cards.map(c=>
     '<div class="overview-stat"><strong>'+Number(c[1]||0).toLocaleString()+'</strong><span>'+esc(c[0])+'</span></div>').join('')+
     '</div><h2 style="margin-top:14px">Топ-3 моделей по проценту прохождения</h2><div class="overview-leaders">'+(stats.leaderboard||[]).map((m,i)=>
     '<div class="overview-leader"><span class="muted">#'+(i+1)+'</span><b>'+esc(m.name)+'</b><span class="overview-rate">'+(100*m.pass_rate).toFixed(1)+
     '%</span> <span class="muted">'+m.solved+' / '+m.evaluated+'</span></div>').join('')+
     '</div><p class="muted small">Все уровни и конфиги. Решено = верный код (✅ + 🟡). Сбои стенда исключены из процента. Наборы задач у моделей различаются.</p>';
+  if (root.__html !== html) { root.innerHTML = html; root.__html = html; }   // redraw only when the numbers change
 }
 
 function render(state, preserve) {
@@ -1627,13 +1685,34 @@ function render(state, preserve) {
   requestAnimationFrame(function () { restoreScroll(saved); });
 }
 
+// Owner 2026-10-28: the full state (~3.5 MB) loads once per page load (F5); later ticks fetch only what changed
+// (?since=) and merge it into the copy in memory, so the archive is neither downloaded nor redrawn again.
+let fullState = null;
+
+function mergeDelta(old, d) {
+  const pick = function (names, fresh, prev) {
+    const now = new Map(fresh.map(function (x) { return [x.name, x]; }));
+    const was = new Map(prev.map(function (x) { return [x.name, x]; }));
+    return names.map(function (n) { return now.get(n) || was.get(n); }).filter(Boolean);
+  };
+  const merged = Object.assign({}, d);
+  merged.groups = pick(d.group_names || [], d.groups || [], old.groups || []);
+  merged.contests = pick(d.contest_names || [], d.contests || [], old.contests || []);
+  merged.old_benchmarks = old.old_benchmarks;
+  delete merged.delta; delete merged.group_names; delete merged.contest_names;
+  return merged;
+}
+
 async function tick() {
   const banner = document.getElementById("error");
   try {
-    const response = await fetch("/data/state.json", {cache: "no-store"});
+    const url = "/data/state.json";
+    const response = await fetch(url, {cache: "no-store"});
     if (!response.ok) throw new Error("HTTP " + response.status);
-    const state = await response.json();
-    if (state.error) throw new Error(state.error);
+    const got = await response.json();
+    if (got.error) throw new Error(got.error);
+    const state = fullState && got.delta ? mergeDelta(fullState, got) : got;
+    fullState = state;
     render(state, !firstRender);
     firstRender = false;
     banner.classList.add("hidden");

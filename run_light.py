@@ -146,6 +146,12 @@ def worker(work,key,kind,timeout=15):
     return dict(success=res.returncode==0,exit_code=res.returncode,output=res.stdout[-4000:],error=res.stderr[-3000:])
 
 
+def parser_failure(exc):
+    """HTTP 500 from Ollama's tool-call parser: the model produced an unparsable call (seen 2026-10-28)."""
+    text=str(exc or '')
+    return '500' in text and ('error parsing tool call' in text or 'arg_key and arg_value' in text)
+
+
 def m4_recovery(commands):
     """M4 (Astra review 2026-10-28): the obsolete command really ran and failed, then the fallback smoke check
     really ran and passed after it; a generic 'tests ran' flag does not prove this."""
@@ -252,7 +258,7 @@ def episode(output,label,key,configuration):
     else:
         messages=[dict(role='system',content=instructions),dict(role='user',content=task_text)]
     calls=0; seen_test_success=False; final=None; violations=[]; infra_error=None; time_limit=False; commands_run=[]
-    format_errors=0; native_calls=0
+    format_errors=0; native_calls=0; parse_failures=0; raise_or=None
     sums={k:0 for k in ['load_duration','prompt_eval_duration','eval_duration','prompt_eval_count','eval_count']}
     began=time.perf_counter(); started=datetime.now(timezone.utc).isoformat(); truncated=False
     # A final report may require one extra generation after 12 calls, but no 13th tool is executed.
@@ -265,8 +271,26 @@ def episode(output,label,key,configuration):
         else: request['format']='json'
         if info['think_request'] is not None: request['think']=info['think_request']
         append(transcript,dict(event='request',turn=turn,payload=request))
-        try: response=api('chat',request,timeout=max(1,left))
-        except Exception as exc:
+        response=None
+        for attempt in range(3):
+            try:
+                response=api('chat',request,timeout=max(1,spec['seconds']-(time.perf_counter()-began)))
+                break
+            except Exception as exc:
+                if not parser_failure(exc) or time.perf_counter()-began>=spec['seconds']: raise_or=exc; break
+                # Ollama could not parse the model's tool call (gpt-oss: raw='', GLM: arg_key/arg_value mismatch):
+                # the model's output, not infra (owner 2026-10-28). Retry with another seed, at most twice.
+                parse_failures+=1
+                append(transcript,dict(event='parser_failure',turn=turn,attempt=attempt,error=str(exc)[:400]))
+                request=dict(request,options=dict(request['options'],seed=(request['options'].get('seed') or 0)+1000+attempt))
+                raise_or=exc
+        if response is None and parser_failure(raise_or):
+            format_errors+=1   # three unparsable tool calls in a row: tell the model and go on, it costs the turn
+            messages.append(dict(role='user',content='Your last tool call could not be parsed (invalid or empty '
+                                 'arguments). Call exactly one tool with valid JSON arguments.'))
+            continue
+        if response is None:
+            exc=raise_or
             if 'timed out' in str(exc) and time.perf_counter()-began>=spec['seconds']-2: time_limit=True
             else: infra_error=f'{type(exc).__name__}: {exc}'
             break
@@ -336,7 +360,7 @@ def episode(output,label,key,configuration):
         config_id=configuration.get('config_id','light-common8k2k'),seed=configuration['options'].get('seed',42),
         started_at=started,ended_at=datetime.now(timezone.utc).isoformat(),wall_seconds=round(wall,3),
         tool_calls=calls,usage=sums,truncation=truncated,infra_error=infra_error,time_limit=time_limit,final=final,
-        tool_mode=TOOL_MODE,native_tool_calls=native_calls,format_errors=format_errors,
+        tool_mode=TOOL_MODE,native_tool_calls=native_calls,format_errors=format_errors,parser_failures=parse_failures,
         code_pass=acceptance['success'],acceptance=acceptance,violations=violations,
         observed_candidate_test_pass=seen_test_success,commands_run=commands_run,
         m4_recovery_observed=(None if key!='M4' else m4_recovery(commands_run)),
