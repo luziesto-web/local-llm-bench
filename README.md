@@ -4,6 +4,26 @@ An independent benchmark of open-weight models run locally through Ollama on one
 which settings (reasoning mode, temperature, context and reply budget) actually solve small coding tasks, and how
 long they take.
 
+## The goal: a local assembly line, not one "best model"
+
+On 8 GB of VRAM no single model is both fast and reliable. One big model for every step is too slow; one small
+model for every step is too unreliable. So the benchmark is built around **roles**: one prompt goes in, a planner
+breaks it into steps, each step is delegated to the cheapest model that does that kind of step reliably, and a
+strong model checks the result. The levels below exist to find the right model and settings for each role.
+
+| Role (tag size) | What it does in the line | What matters | Typical size |
+|---|---|---|---|
+| **SuperLight** (XS) | routing, classification, extracting fields, filtering - one shot, strict machine-readable output | speed, format discipline | 0.8-3B |
+| **Light** (S) | small code edits: one module, one trap, with tools | fast and mostly right | 3-4B |
+| **Medium** (M) | multi-file fixes, recovering when a tool fails, routine executor work | balance of quality and speed | 7-9B |
+| **High** (L) | heavy but quality executors: concurrency, permissions, versioned data, bugs from logs; 12-min cap | correctness first, bounded time | 20-30B (MoE) |
+| **Mastermind** (XL) | 1-2 most reliable models: plan, decompose, delegate, **review and verify** the others' work | quality only - time is irrelevant | largest that runs (CPU offload allowed) |
+
+The target line: **one or two reliable Mastermind models** for planning and checking, **heavy but high-quality
+High executors**, **steady Medium executors**, and **light, fast Light/SuperLight workers** for the many small
+steps - assembled into one cycle driven by a single prompt with efficient delegation. Between High and Mastermind
+sits a qualification level that decides who may be trusted with the checker role.
+
 ## Findings so far
 
 1. **Light tasks**: Gemma 4 E4B and Qwen 3.5 4B tie (9/12 correct code) in the config matrix; for every model the
@@ -36,8 +56,8 @@ the files the model wrote; time = wall-clock minutes per episode.
 | qwen3.5-9b | — | — | 35/60 (58%) | 1.5 | 10/19 (53%) | 3.6 |
 | k2-horizon-7b-q5 | — | — | 36/41 (88%) | 2.7 | 17/21 (81%) | 2.6 |
 | nemotron-3.5-lightning-30b | — | — | — | — | 16/25 (64%) | 4.1 |
+| glm-4.7-flash | — | — | — | — | 11/22 (50%) | 2.2 |
 | gpt-oss-20b | — | — | 0/4 (0%) | 1.6 | 15/17 (88%) | 4.5 |
-| glm-4.7-flash | — | — | — | — | 10/21 (48%) | 2.2 |
 | qwen3-coder-30b | — | — | — | — | 10/20 (50%) | 1.9 |
 | qwen3.5-0.8b | 3/17 (18%) | 0.2 | — | — | — | — |
 | k2-horizon-7b-q4 | — | — | 5/13 (38%) | 0.7 | — | — |
@@ -54,4 +74,4 @@ the files the model wrote; time = wall-clock minutes per episode.
 - **Results**: `runs/<run>/results.jsonl` - one line per episode (model, config, options, task, seed, code_pass,
   time, token use). Full model transcripts are not published.
 
-Updated daily. Last update: 2026-10-28 19:42 UTC.
+Updated daily. Last update: 2026-10-28 19:47 UTC.
