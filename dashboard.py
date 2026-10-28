@@ -2620,13 +2620,13 @@ def build_state():
         except Exception:  # noqa: BLE001 - skip one broken contest, keep the page alive
             continue
 
-    recent_contests = [contest for contest in contests if contest["recent"]]
+    recent_contests = list(contests)   # owner 2026-10-28: keep every run visible; newest first (was: last 24 h only)
     recent_contests.sort(key=lambda item: item["updated_ts"], reverse=True)
     service_by_name = {contest["name"]: contest["service"] for contest in contests}
 
     special_groups, special_sources = build_special_groups(dirs, now)
     all_groups = build_groups(contests, now) + special_groups
-    recent_groups = [group for group in all_groups if group["recent"]]
+    recent_groups = list(all_groups)   # owner 2026-10-28: older nights no longer drop off the page
     recent_groups.sort(
         key=lambda group: (0 if group["live"] else 1, -group["updated_ts"], group["name"].lower())
     )

@@ -13,4 +13,4 @@ long they take.
 - **Results**: `runs/<run>/results.jsonl` - one line per episode (model, config, options, task, seed, code_pass,
   time, token use). Full model transcripts are not published.
 
-Updated daily. Last update: 2026-10-28 18:32 UTC.
+Updated daily. Last update: 2026-10-28 19:40 UTC.
