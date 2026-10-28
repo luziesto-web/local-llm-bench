@@ -1,16 +1,16 @@
 {
-  "updated_at": "2026-10-28 19:45:54.235636+00:00",
+  "updated_at": "2026-10-28 19:47:58.199239+00:00",
   "deadline": "2026-10-31 18:06:07.259436+00:00",
-  "index": 34,
+  "index": 35,
   "total": 60,
-  "done": 33,
+  "done": 34,
   "skipped_deadline": 0,
   "pid": 8428,
   "current": {
-    "model": "glm-4.7-flash",
-    "config": "agent-th-syshint",
+    "model": "qwen3.5-9b",
+    "config": "th-coding",
     "task": "H3",
-    "tag": "glm-4.7-flash:latest",
-    "folder": "<bench>\\runs\\zoo-high-matrix-20261028-glm-4-7-flash-agent-th-syshint-s11-run\\H3"
+    "tag": "qwen3.5:9b",
+    "folder": "<bench>\\runs\\zoo-high-matrix-20261028-qwen3-5-9b-th-coding-s11-run\\H3"
   }
 }
