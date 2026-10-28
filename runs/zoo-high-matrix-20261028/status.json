@@ -1,16 +1,16 @@
 {
-  "updated_at": "2026-10-28 19:47:58.199239+00:00",
+  "updated_at": "2026-10-28 19:54:32.495326+00:00",
   "deadline": "2026-10-31 18:06:07.259436+00:00",
-  "index": 35,
+  "index": 36,
   "total": 60,
-  "done": 34,
+  "done": 35,
   "skipped_deadline": 0,
   "pid": 8428,
   "current": {
     "model": "qwen3.5-9b",
-    "config": "th-coding",
+    "config": "th-general",
     "task": "H3",
     "tag": "qwen3.5:9b",
-    "folder": "<bench>\\runs\\zoo-high-matrix-20261028-qwen3-5-9b-th-coding-s11-run\\H3"
+    "folder": "<bench>\\runs\\zoo-high-matrix-20261028-qwen3-5-9b-th-general-s11-run\\H3"
   }
 }

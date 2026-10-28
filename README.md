@@ -24,6 +24,30 @@ High executors**, **steady Medium executors**, and **light, fast Light/SuperLigh
 steps - assembled into one cycle driven by a single prompt with efficient delegation. Between High and Mastermind
 sits a qualification level that decides who may be trusted with the checker role.
 
+## The final exam for High models (in preparation)
+
+Short coding tasks show who can fix a module. The final exam shows who can **build a whole product**. Every High
+configuration gets the same brief: build a real, reusable **team collaboration website from scratch** - a Python
+server with a real database, not a mock-up - in ten consecutive stages, each in a fresh conversation with only a
+handoff note from its own previous stage. Accounts and sessions, shared workspaces with roles and access
+boundaries, work items with versioning and conflicting edits, comments, invitations, search and filters, a summary
+view, an accessible UI and demo data.
+
+Each model family builds the same product under its own theme, so the sites cannot be copied from each other:
+
+| Family | Site | Theme |
+|---|---|---|
+| gpt-oss 20B | Fieldnote | editorial desk |
+| Qwen3-Coder 30B | Launchboard | product team portal |
+| Nemotron 3.5 Lightning 30B | Labbook | research team journal |
+| GLM 4.7 Flash | Craftdesk | design studio |
+| Qwen 3.5 9B | Studyflow | study group |
+| K2-Horizon 7B | Eventroom | events team |
+
+Models work inside an isolated sandbox (one locked-down user per entry, no internet, no access to other entries or
+to the checker). An independent acceptance suite - not shown to the models - scores each site; a stage that breaks
+the foundation blocks the stages built on it. The exact tasks and checks stay private until the exam is run.
+
 ## Findings so far
 
 1. **Light tasks**: Gemma 4 E4B and Qwen 3.5 4B tie (9/12 correct code) in the config matrix; for every model the
@@ -53,7 +77,7 @@ the files the model wrote; time = wall-clock minutes per episode.
 | granite4.2-3b | 64/103 (62%) | 0.5 | — | — | — | — |
 | gemma4-e2b | 25/92 (27%) | 0.2 | — | — | — | — |
 | granite4.2-8b | — | — | 50/88 (57%) | 1.0 | — | — |
-| qwen3.5-9b | — | — | 35/60 (58%) | 1.5 | 10/19 (53%) | 3.6 |
+| qwen3.5-9b | — | — | 35/60 (58%) | 1.5 | 11/20 (55%) | 3.7 |
 | k2-horizon-7b-q5 | — | — | 36/41 (88%) | 2.7 | 17/21 (81%) | 2.6 |
 | nemotron-3.5-lightning-30b | — | — | — | — | 16/25 (64%) | 4.1 |
 | glm-4.7-flash | — | — | — | — | 12/23 (52%) | 2.1 |
@@ -77,4 +101,4 @@ the files the model wrote; time = wall-clock minutes per episode.
 **How this was built**: the code was written by AI coding agents (Claude, ChatGPT/Codex) under my direction; the
 task ladder, the method, the decisions and the conclusions are mine.
 
-Updated daily. Last update: 2026-10-28 19:51 UTC.
+Updated daily. Last update: 2026-10-28 19:57 UTC.
