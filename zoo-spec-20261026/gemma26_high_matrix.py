@@ -69,6 +69,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--resume", action="store_true", help="continue an interrupted run of the same name")
     ap.add_argument("--round2", help="comma-separated finalist configs for the hard tasks")
     a = ap.parse_args()
     assert z.runner.LEVELS["high"]["seconds"] == 720
@@ -84,7 +85,7 @@ if __name__ == "__main__":
         for r in build_plan({TAG: {}})["runs"]:
             print(r["config_id"], r["task_id"], r["think"], r["options"])
         sys.exit(0)
-    if (z.RUNS / NAME).exists():
+    if (z.RUNS / NAME).exists() and not a.resume:
         raise SystemExit(f"Refusing to overwrite existing run: {NAME}")
     if z.runner.api("ps").get("models"):
         raise SystemExit("Ollama has a model loaded (another run?); wait for it to finish.")
