@@ -71,6 +71,10 @@ NATIVE_INTRO=('Use the provided tools: exactly one tool call per response, no pr
               'The tools mirror these actions (arguments as shown):')
 
 
+class NoToolCall(ValueError):
+    """Native mode: the reply was prose without a tool call before any passing run_tests."""
+
+
 def tool_specs(level):
     def tool(name,description,**props):
         return dict(type='function',function=dict(name=name,description=description,parameters=dict(
@@ -320,6 +324,17 @@ def episode(output,label,key,configuration):
                     action_text=action_text.split('</think>',1)[1].strip()
                 if action_text.startswith('<response>') and action_text.endswith('</response>'):
                     action_text=action_text[len('<response>'):-len('</response>')].strip()
+            if native and not tool_calls and action_text and not action_text.startswith('{'):
+                if seen_test_success:
+                    # Native mode, owner 2026-10-29: plain text after an observed passing run_tests is the
+                    # model's final answer, as in OpenCode (gpt-oss ends on its final channel). Before, the
+                    # reply got a raw JSONDecodeError and gpt-oss lost up to 29 turns re-sending its report.
+                    # The hidden acceptance checks still decide code_pass.
+                    final=dict(action='final',report=action_text[:4000],tests_passed=True,
+                               tests_passed_source='observed_run_tests',final_source='native_text')
+                    break
+                raise NoToolCall('No tool was called. Call one tool to continue; '
+                                 'call final after a passing run_tests to finish.')
             action=json.loads(action_text)
             if not isinstance(action,dict): raise ValueError('Expected JSON object')
             if 'action' not in action and isinstance(action.get('report'),str):
@@ -342,7 +357,7 @@ def episode(output,label,key,configuration):
         except Exception as exc:
             calls+=0 if content.strip().startswith('{') else 1
             result=dict(error=f'{type(exc).__name__}: {exc}')
-            if isinstance(exc,json.JSONDecodeError) or str(exc)=='Expected JSON object': format_errors+=1
+            if isinstance(exc,(json.JSONDecodeError,NoToolCall)) or str(exc)=='Expected JSON object': format_errors+=1
             if 'Write not allowed' in str(exc) or 'Links forbidden' in str(exc): violations.append(str(exc))
         append(transcript,dict(event='tool_result',turn=turn,result=result))
         if native and tool_calls:

@@ -20,14 +20,14 @@
   "gpt-oss-20b": {
     "num_ctx": 49152,
     "num_predict": 24576,
-    "status": "removed",
+    "status": "approved",
     "scope": "raised by owner",
-    "removed": "2026-10-29 owner (chat): gpt-oss taken off all tests, every config; results kept as history",
     "best_config": {
       "config": "low",
       "approved": "2026-10-29 owner (chat)",
-      "evidence": "High 9/10 clean on seeds 11/22/33 + H2 fail, median 132 s (fastest); Light low 2/4 vs medium 1/4; Medium low 1/2 vs medium 2/2; model removed from further tests"
-    }
+      "evidence": "High 9/10 clean on seeds 11/22/33 + H2 fail, median 132 s (fastest); Light low 2/4 vs medium 1/4; Medium low 1/2 vs medium 2/2"
+    },
+    "knockout_stopped": "2026-10-29 owner: config knockout stopped (low/medium/high all solved High tasks, no clear pick); gpt-oss stays in the High contest and Mastermind with best_config low"
   },
   "glm-4.7-flash": {
     "num_ctx": 65536,

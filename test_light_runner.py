@@ -149,5 +149,40 @@ class NativeToolTests(unittest.TestCase):
         self.assertEqual(result['format_errors'],1)
         self.assertTrue(result['automated_workflow_pass'])
 
+    def text(self,content):
+        return dict(message=dict(content=content),done_reason='stop')
+
+    def test_native_text_after_passing_tests_is_the_final_answer(self):
+        # 2026-10-29: gpt-oss ends with plain text; it used to get a raw JSONDecodeError and repeat itself.
+        replies=iter([self.call(a['action'],{k:v for k,v in a.items() if k!='action'}) for a in self.actions[:3]]
+                     +[self.text('report: Fixed addition; supplied checks pass.')])
+        result,requests=self.run_episode(replies,'native')
+        self.assertTrue(result['automated_workflow_pass'])
+        self.assertEqual(len(requests),4,'no extra turns after the text final')
+        self.assertEqual(result['final']['final_source'],'native_text')
+        self.assertTrue(result['final']['tests_passed'])
+        self.assertEqual(result['format_errors'],0)
+
+    def test_native_text_before_passing_tests_gets_a_clear_hint(self):
+        replies=iter([self.text('I will fix calculator.py now.')]
+                     +[self.call(a['action'],{k:v for k,v in a.items() if k!='action'}) for a in self.actions])
+        result,requests=self.run_episode(replies,'native')
+        self.assertTrue(result['automated_workflow_pass'])
+        self.assertEqual(result['format_errors'],1)
+        hint=requests[1]['messages'][-1]['content']
+        self.assertIn('Call one tool to continue',hint)
+        self.assertNotIn('JSONDecodeError',hint)
+        self.assertNotEqual(result['final'].get('final_source'),'native_text')
+
+    def test_native_text_after_a_new_write_is_not_a_final(self):
+        # A write after the passing run invalidates it: text then is not accepted as done.
+        actions=self.actions[:3]+[dict(action='write_file',path='calculator.py',content='def add(a, b):\n    return a - b\n')]
+        replies=iter([self.call(a['action'],{k:v for k,v in a.items() if k!='action'}) for a in actions]
+                     +[self.text('report: done.')]
+                     +[self.call('run_tests',{}),self.call('final',dict(report='Ran checks.',tests_passed=False))])
+        result,_=self.run_episode(replies,'native')
+        self.assertEqual(result['format_errors'],1)
+        self.assertNotEqual(result['final'].get('final_source'),'native_text')
+
 
 if __name__=='__main__': unittest.main()
