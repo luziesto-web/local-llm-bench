@@ -85,6 +85,7 @@ the files the model wrote; time = wall-clock minutes per episode.
 | qwen3-coder-30b | — | — | — | — | 14/29 (48%) | 2.1 |
 | qwen3.5-0.8b | 3/17 (18%) | 0.2 | — | — | — | — |
 | k2-horizon-7b-q4 | — | — | 5/13 (38%) | 0.7 | — | — |
+| gemma4-12b | — | — | — | — | 3/5 (60%) | 12.0 |
 | bonsai-2-9b | — | — | 2/5 (40%) | 1.0 | — | — |
 | k2-horizon-7b-q8 | — | — | 4/5 (80%) | 2.2 | — | — |
 | devstral-24b | — | — | — | — | 1/4 (25%) | 23.1 |
@@ -102,4 +103,4 @@ the files the model wrote; time = wall-clock minutes per episode.
 **How this was built**: the code was written by AI coding agents (Claude, ChatGPT/Codex) under my direction; the
 task ladder, the method, the decisions and the conclusions are mine.
 
-Updated hourly while runs are active. Last update: 2026-10-29 16:00 UTC.
+Updated hourly while runs are active. Last update: 2026-10-29 17:00 UTC.
