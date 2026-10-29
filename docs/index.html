@@ -454,6 +454,7 @@
     background: #241719;
     color: #d9a3a7;
   }
+
 </style>
 </head>
 <body>
@@ -1653,7 +1654,6 @@ function render(state, preserve) {
   const saved = preserve ? captureScroll() : null;
   lastState = state;
   renderOverview(state.overview);
-  
   selectedCategory = pickCategory(state);
 
   document.getElementById("meta").textContent =
