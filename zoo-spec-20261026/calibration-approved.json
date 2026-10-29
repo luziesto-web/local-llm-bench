@@ -33,7 +33,12 @@
     "num_ctx": 65536,
     "num_predict": 8192,
     "status": "approved",
-    "scope": "raised by owner"
+    "scope": "raised by owner",
+    "best_config": {
+      "config": "agent-th-syshint",
+      "approved": "2026-10-29 owner (this chat)",
+      "evidence": "zoo-high-matrix-20261028: H0/H3/H8 seed11, code=3/3 workflow=3/3, total 336.686 s; owner stopped new matrix and selected this config for contest"
+    }
   },
   "qwen3.5-9b": {
     "num_ctx": 110592,
