@@ -102,4 +102,4 @@ the files the model wrote; time = wall-clock minutes per episode.
 **How this was built**: the code was written by AI coding agents (Claude, ChatGPT/Codex) under my direction; the
 task ladder, the method, the decisions and the conclusions are mine.
 
-Updated hourly while runs are active. Last update: 2026-10-29 07:00 UTC.
+Updated hourly while runs are active. Last update: 2026-10-29 08:00 UTC.
