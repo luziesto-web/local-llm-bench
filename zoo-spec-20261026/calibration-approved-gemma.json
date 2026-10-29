@@ -1,0 +1,11 @@
+{
+  "_note": "Owner-approved budgets for Gemma 4 (chat 2026-10-29). Kept apart from calibration-approved.json because the website pilot sessions/pilot-gptoss-low-20261029 pins that file's SHA-256; merge when the pilot is prepared again.",
+  "gemma4-26b": {
+    "num_ctx": 20480,
+    "num_predict": 14336,
+    "status": "approved",
+    "scope": "High; calibration round 1 (gemma4-26b-high-calibrate-r1-20261029): th-official 32K/16K, H0/H5/H8 seeds 11/22, 4/6 W; peak 11245 tokens, longest reply 9833 -> 20K/14K proposed, approved by owner without round 2",
+    "tag": "gemma4:26b-a4b-it-qat",
+    "use_mmap": true
+  }
+}

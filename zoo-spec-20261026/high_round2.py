@@ -95,12 +95,17 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--tiebreak", help="model key tied on seed 11: replay its configs on seed 22 -> <NAME>-s22-<model>")
     ap.add_argument("--coder", action="store_true", help="Qwen3-Coder batch -> runs/zoo-high-round2-coder-20261029 (only after the owner reviews it)")
     a = ap.parse_args()
     if a.coder:
         FINALISTS.clear()
         FINALISTS.update(CODER)
         NAME = "zoo-high-round2-coder-20261029"
+    if a.tiebreak:
+        FINALISTS = {a.tiebreak: FINALISTS[a.tiebreak]}
+        SEED = 22
+        NAME = f"zoo-high-round2-20261029-s22-{a.tiebreak.split('-')[0]}"
     if a.report:
         report()
         sys.exit(0)
