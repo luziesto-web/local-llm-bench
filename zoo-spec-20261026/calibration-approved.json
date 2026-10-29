@@ -10,13 +10,24 @@
     "num_ctx": 36864,
     "num_predict": 20480,
     "status": "approved",
-    "scope": "r2 in norm, r3 partial"
+    "scope": "r2 in norm, r3 partial",
+    "best_config": {
+      "config": "vendor-th",
+      "approved": "2026-10-29 owner (chat)",
+      "evidence": "High 9/9 on seeds 11/22/33 (H0/H3/H8), median 220 s; vendor-th-syshint 3/3 seed 11 only; Light/Medium untested"
+    }
   },
   "gpt-oss-20b": {
     "num_ctx": 49152,
     "num_predict": 24576,
-    "status": "approved",
-    "scope": "raised by owner"
+    "status": "removed",
+    "scope": "raised by owner",
+    "removed": "2026-10-29 owner (chat): gpt-oss taken off all tests, every config; results kept as history",
+    "best_config": {
+      "config": "low",
+      "approved": "2026-10-29 owner (chat)",
+      "evidence": "High 9/10 clean on seeds 11/22/33 + H2 fail, median 132 s (fastest); Light low 2/4 vs medium 1/4; Medium low 1/2 vs medium 2/2; model removed from further tests"
+    }
   },
   "glm-4.7-flash": {
     "num_ctx": 65536,
