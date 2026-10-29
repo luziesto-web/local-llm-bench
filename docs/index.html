@@ -1042,6 +1042,21 @@ function modelBlock(c, row) {
 }
 
 function groupCardHtml(c) {
+  if (c.websites) {
+    const key = "g:" + c.name;
+    const open = isOpen(key, c.live);
+    let html = '<section class="group-card" data-group="' + esc(c.name) + '"><button type="button" class="group-head" data-group-toggle="' + esc(c.name) + '" aria-expanded="' + open + '"><span class="chev">' + (open ? '▾' : '▸') + '</span><b>' + esc(c.name) + '</b> · ' + esc(c.state) + ' · ' + esc(c.episodes_text) + '</button><div class="group-body"' + (open ? '' : ' hidden') + '>';
+    const colors = {passed:'#177b48',passed_partial:'#a66b00',failed_model:'#ac3434',infra_failed:'#764eaa',running:'#1768a4',blocked_dependency:'#555',disabled:'#34343b'};
+    for (const row of c.hw_rows || []) {
+      html += '<p><b>' + esc(row.model) + '</b> · ' + esc(row.config) + '</p><div class="cellbar">';
+      for (const task of Object.keys(row.cells)) {
+        const cell = row.cells[task];
+        html += '<button type="button" class="cell-square" style="background:' + (colors[cell.state] || '#555') + ';width:54px;height:48px;color:white" data-hw-session="' + esc(c.hw_session) + '" data-hw-entry="' + esc(row.entry_id) + '" data-hw-stage="' + esc(task) + '" title="' + esc(task + ': ' + cell.state + (cell.pass_count == null ? '' : ' · ' + cell.pass_count + '/5')) + '">' + esc(task) + '</button>';
+      }
+      html += '</div>';
+    }
+    return html + '<p class="muted">HW11–HW12 disabled. Partial coverage does not certify a ready website.</p></div></section>';
+  }
   const key = "g:" + c.name;
   const open = isOpen(key, c.live);
   const typeLabel = c.category === "contest" ? "Конкурс" : "Тест модели";
@@ -1145,6 +1160,8 @@ function rowSignature(row) {
 function groupSignature(c) {
   return JSON.stringify({
     name: c.name,
+    hw_rows: c.hw_rows,
+    hw_state: c.websites ? c.state : null,
     level: c.level,
     category: c.category,
     service: !!c.service,
@@ -1725,6 +1742,7 @@ async function tick() {
 
 document.addEventListener("click", function (event) {
   markInteraction(event.target);
+  
   const oldHead = event.target.closest(".old-card .group-head");
   if (oldHead) {
     const card = oldHead.closest(".old-card");
