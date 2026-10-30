@@ -31,12 +31,12 @@
   },
   "glm-4.7-flash": {
     "num_ctx": 65536,
-    "num_predict": 8192,
+    "num_predict": 16384,
     "status": "approved",
-    "scope": "raised by owner",
+    "scope": "raised by owner; 2026-10-29 output raised 8192->16384 after a002 truncated GLM tool-call at 8K (see high-websites-benchmark-v1/docs/STOP_REPORT_GLM_A002_20261029.md)",
     "best_config": {
       "config": "agent-th-syshint",
-      "approved": "2026-10-29 owner (this chat)",
+      "approved": "2026-10-29 owner (this chat); budget 64K/16K approved after a002 truncation",
       "evidence": "zoo-high-matrix-20261028: H0/H3/H8 seed11, code=3/3 workflow=3/3, total 336.686 s; owner stopped new matrix and selected this config for contest"
     }
   },
