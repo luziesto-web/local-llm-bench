@@ -7,5 +7,12 @@
     "scope": "High; calibration round 1 (gemma4-26b-high-calibrate-r1-20261029): th-official 32K/16K, H0/H5/H8 seeds 11/22, 4/6 W; peak 11245 tokens, longest reply 9833 -> 20K/14K proposed, approved by owner without round 2",
     "tag": "gemma4:26b-a4b-it-qat",
     "use_mmap": true
+  },
+  "gemma4-12b": {
+    "num_ctx": 16384,
+    "num_predict": 8192,
+    "status": "proposed",
+    "scope": "High; calibration round 1 (gemma4-12b-high-calibrate-r1-20261029): th-official 32K/16K, H0/H5/H8 seeds 11/22, 2/6 W (H0 x2); peak 3902 tokens, longest reply 1533; calib_report proposed 8K/4K. Claude proposes 16K/8K because 3 of 4 failures were 720 s timeouts (episodes cut by time, so the peak is a lower bound). NOT approved: the matrix refuses to start until the owner sets status=approved.",
+    "tag": "gemma4:12b-it-qat"
   }
 }
