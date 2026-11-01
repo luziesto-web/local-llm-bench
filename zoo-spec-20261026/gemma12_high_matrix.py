@@ -79,13 +79,14 @@ if __name__ == "__main__":
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--resume", action="store_true", help="continue an interrupted run of the same name")
     ap.add_argument("--start", action="store_true", help="required to actually run (owner go-ahead)")
+    ap.add_argument("--batch", help="round 2 only: suffix for a second batch of finalists (own run folder)")
     ap.add_argument("--round2", help="comma-separated finalist configs for the hard tasks")
     a = ap.parse_args()
     assert z.runner.LEVELS["high"]["seconds"] == 720
     if a.round2:
         ACTIVE = [c for c in a.round2.split(",") if c]
         assert ACTIVE and set(ACTIVE) <= set(CONFIGS), ACTIVE
-        TASKS, NAME = ROUND2, "gemma4-12b-high-round2-20261031"
+        TASKS, NAME = ROUND2, "gemma4-12b-high-round2-20261031" + (f"-{a.batch}" if a.batch else "")
     if a.report:
         report()
         sys.exit(0)
