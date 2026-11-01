@@ -1,8 +1,10 @@
 """Gemma 4 12B — High config matrix (owner 2026-10-31: "крутануть её в разных конфигах на L тестах").
 
 Copy of gemma26_high_matrix.py for the dense 12B (no use_mmap: 7.2 GB, 73% on GPU in the passport).
-The budget comes from calibration-approved-gemma.json["gemma4-12b"] and the script refuses to start unless its
-status is "approved" (owner decision; proposed 16K/8K on 2026-10-31).
+Budget is a matrix axis (owner 2026-11-01): b16 = 16K/8K and b32 = 32K/16K from calibration-approved-gemma.json.
+Config ids carry the budget as a prefix: b16-th-official ... (prefix, not suffix: light_matrix detects the hint by endswith("-syshint")).
+ 4 configs x 2 budgets x H0, H3, H8 = 24 episodes.
+Thinking: the template offers only think false/true (no low/medium/high levels), so th-/nt- cover it.
 
 Original 26B notes:
 
@@ -15,7 +17,7 @@ Round 2 (--round2 cfg[,cfg]): finalists x H1, H2, H4, H6, H7, H9, seed 11 -> run
 the same tasks and seed as zoo-high-round2-20261029, so Gemma compares with the other models directly.
 
   python gemma12_high_matrix.py --dry-run
-  python gemma12_high_matrix.py                 (refuses to start while another model is loaded)
+  python gemma12_high_matrix.py --start         (refuses to start while another model is loaded)
   python gemma12_high_matrix.py --report
 """
 import argparse
@@ -30,8 +32,9 @@ import high_matrix  # noqa: F401  (imports light_matrix: the -syshint system-pro
 KEY, TAG = "gemma4-12b", "gemma4:12b-it-qat"
 GOOGLE = {"temperature": 1.0, "top_p": 0.95, "top_k": 64}
 APPROVED = json.loads((Path(__file__).resolve().parent / "calibration-approved-gemma.json").read_text(encoding="utf-8"))[KEY]
-BUDGET = {"num_ctx": APPROVED["num_ctx"], "num_predict": APPROVED["num_predict"]}
-CONFIGS = {"th-official": True, "nt-official": False, "th-official-syshint": True, "nt-official-syshint": False}
+BUDGETS = APPROVED["budgets"]
+BASE = {"th-official": True, "nt-official": False, "th-official-syshint": True, "nt-official-syshint": False}
+CONFIGS = {f"{b}-{c}": (think, BUDGETS[b]) for b in BUDGETS for c, think in BASE.items()}
 SCREEN = ("H0", "H3", "H8")
 ROUND2 = ("H1", "H2", "H4", "H6", "H7", "H9")
 SEED = 11
@@ -46,7 +49,7 @@ def build_plan(inv, only=None, profile="all", levels=("high",)):
     for task in TASKS:                       # task by task: every config on H0, then the next task
         for cfg in ACTIVE:
             runs.append(dict(phase=1, level="high", model_key=KEY, tag=TAG, original=TAG, config_id=cfg,
-                             think=CONFIGS[cfg], options=dict(GOOGLE, **BUDGET, seed=SEED), seed=SEED, task_id=task,
+                             think=CONFIGS[cfg][0], options=dict(GOOGLE, **CONFIGS[cfg][1], seed=SEED), seed=SEED, task_id=task,
                              contract="explicit", structured=False, deviation=False, hint=False, baked=False,
                              tool_mode="native", purpose="Gemma 4 12B High config matrix",
                              est_seconds=z.runner.LEVELS["high"]["seconds"]))
@@ -75,6 +78,7 @@ if __name__ == "__main__":
     ap.add_argument("--report", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--resume", action="store_true", help="continue an interrupted run of the same name")
+    ap.add_argument("--start", action="store_true", help="required to actually run (owner go-ahead)")
     ap.add_argument("--round2", help="comma-separated finalist configs for the hard tasks")
     a = ap.parse_args()
     assert z.runner.LEVELS["high"]["seconds"] == 720
@@ -90,6 +94,8 @@ if __name__ == "__main__":
         for r in build_plan({TAG: {}})["runs"]:
             print(r["config_id"], r["task_id"], r["think"], r["options"])
         sys.exit(0)
+    if not a.start:
+        raise SystemExit("Not started: pass --start once the owner says go (use --dry-run to see the plan).")
     if APPROVED.get("status") != "approved":
         raise SystemExit(f"Budget for {KEY} is {APPROVED.get('status')!r}, not approved: the owner must approve it first.")
     if (z.RUNS / NAME).exists() and not a.resume:

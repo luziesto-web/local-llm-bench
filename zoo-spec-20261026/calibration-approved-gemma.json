@@ -9,10 +9,18 @@
     "use_mmap": true
   },
   "gemma4-12b": {
-    "num_ctx": 16384,
-    "num_predict": 8192,
-    "status": "proposed",
-    "scope": "High; calibration round 1 (gemma4-12b-high-calibrate-r1-20261029): th-official 32K/16K, H0/H5/H8 seeds 11/22, 2/6 W (H0 x2); peak 3902 tokens, longest reply 1533; calib_report proposed 8K/4K. Claude proposes 16K/8K because 3 of 4 failures were 720 s timeouts (episodes cut by time, so the peak is a lower bound). NOT approved: the matrix refuses to start until the owner sets status=approved.",
+    "budgets": {
+      "b16": {
+        "num_ctx": 16384,
+        "num_predict": 8192
+      },
+      "b32": {
+        "num_ctx": 32768,
+        "num_predict": 16384
+      }
+    },
+    "status": "approved",
+    "scope": "High; owner 2026-11-01: budget is a matrix axis, two budgets b16 (16K/8K) and b32 (32K/16K). Calibration r1 (gemma4-12b-high-calibrate-r1-20261029): th-official 32K/16K, 2/6 W, peak 3902 tokens, longest reply 1533, 3 of 4 failures were 720 s timeouts.",
     "tag": "gemma4:12b-it-qat"
   }
 }
