@@ -59,7 +59,7 @@ MODELS = {  # key: (tag, [(config_id, think, sampling)])  think None = no think 
                                               ("nt-vendor", False, {"temperature": 1.0, "top_p": 0.95, "top_k": 64}),
                                               ("th-vendor-syshint", True, {"temperature": 1.0, "top_p": 0.95, "top_k": 64})]),
 }
-DEFAULT = ["north-mini-code", "nemotron-cascade-2-30b", "qwen3.6-35b", "laguna-xs-2.1", "ornith-1.5-35b", "flint-40b"]
+DEFAULT = ["qwen3.6-35b", "laguna-xs-2.1", "north-mini-code", "nemotron-cascade-2-30b", "flint-40b", "ornith-1.5-35b"]  # fastest first (passport 2026-11-02)
 TASKS = ("H0", "H3", "H8")
 SEED = 11
 NAME = "new-models-high-screen-20261101"
@@ -106,6 +106,7 @@ if __name__ == "__main__":
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--start", action="store_true", help="required to actually run (owner go-ahead)")
     ap.add_argument("--resume", action="store_true", help="continue an interrupted run of the same name")
+    ap.add_argument("--hours", type=float, default=12.0)
     ap.add_argument("--models", help="comma-separated model keys (default: the six MoE models)")
     a = ap.parse_args()
     assert z.runner.LEVELS["high"]["seconds"] == 720
@@ -129,7 +130,7 @@ if __name__ == "__main__":
     if z.runner.api("ps").get("models"):
         raise SystemExit("Ollama has a model loaded (another run?); wait for it to finish.")
     try:
-        sys.exit(z.run(argparse.Namespace(name=NAME, hours=12, new_deadline=True, models=None, profile="all",
+        sys.exit(z.run(argparse.Namespace(name=NAME, hours=a.hours, new_deadline=not a.resume, models=None, profile="all",
                                           levels=["high"])))
     finally:
         for k in ACTIVE:
