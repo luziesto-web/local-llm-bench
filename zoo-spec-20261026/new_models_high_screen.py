@@ -61,9 +61,11 @@ MODELS = {  # key: (tag, [(config_id, think, sampling)])  think None = no think 
 }
 DEFAULT = ["qwen3.6-35b", "laguna-xs-2.1", "north-mini-code", "nemotron-cascade-2-30b", "flint-40b", "ornith-1.5-35b"]  # fastest first (passport 2026-11-02)
 TASKS = ("H0", "H3", "H8")
+ROUND2 = ("H1", "H2", "H4", "H6", "H7", "H9")    # same hard tasks and seed as zoo-high-round2-20261029
 SEED = 11
 NAME = "new-models-high-screen-20261101"
 ACTIVE = list(DEFAULT)
+ONLY = None                                      # --round2: set of "model_key/config_id" finalists
 
 
 def build_plan(inv, only=None, profile="all", levels=("high",)):
@@ -74,6 +76,8 @@ def build_plan(inv, only=None, profile="all", levels=("high",)):
             raise SystemExit(f"missing tag {tag}")
         for task in TASKS:
             for cfg, think, sampling in configs:
+                if ONLY is not None and f"{key}/{cfg}" not in ONLY:
+                    continue
                 runs.append(dict(phase=1, level="high", model_key=key, tag=tag, original=tag, config_id=cfg,
                                  think=think, options=dict(sampling, **BUDGET, seed=SEED), seed=SEED, task_id=task,
                                  contract="explicit", structured=False, deviation=False, hint=False, baked=False,
@@ -106,6 +110,8 @@ if __name__ == "__main__":
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--start", action="store_true", help="required to actually run (owner go-ahead)")
     ap.add_argument("--resume", action="store_true", help="continue an interrupted run of the same name")
+    ap.add_argument("--round2", help="comma-separated model_key/config_id finalists -> H1 H2 H4 H6 H7 H9")
+    ap.add_argument("--batch", help="suffix for a second round-2 batch")
     ap.add_argument("--hours", type=float, help="deadline in hours; with --resume it sets a new deadline")
     ap.add_argument("--models", help="comma-separated model keys (default: the six MoE models)")
     a = ap.parse_args()
@@ -113,6 +119,11 @@ if __name__ == "__main__":
     if a.models:
         ACTIVE = [m for m in a.models.split(",") if m]
         assert ACTIVE and set(ACTIVE) <= set(MODELS), ACTIVE
+    if a.round2:
+        ONLY = set(c for c in a.round2.split(",") if c)
+        ACTIVE = [k for k in DEFAULT + [m for m in MODELS if m not in DEFAULT] if any(c.startswith(k + "/") for c in ONLY)]
+        assert ONLY <= {f"{k}/{c[0]}" for k in MODELS for c in MODELS[k][1]}, ONLY
+        TASKS, NAME = ROUND2, "new-models-high-round2-20261102" + (f"-{a.batch}" if a.batch else "")
     if a.report:
         report()
         sys.exit(0)
