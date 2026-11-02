@@ -82,9 +82,9 @@ the files the model wrote; time = wall-clock minutes per episode.
 | gemma4-12b | — | — | — | — | 39/78 (50%) | 7.5 |
 | gpt-oss-20b | 3/8 (38%) | 1.6 | 3/8 (38%) | 1.6 | 37/47 (79%) | 3.8 |
 | nemotron-3.5-lightning-30b | — | — | — | — | 34/58 (59%) | 5.7 |
-| glm-4.7-flash | — | — | — | — | 19/39 (49%) | 2.4 |
+| glm-4.7-flash | — | — | — | — | 20/43 (47%) | 2.5 |
+| gemma4-26b | — | — | — | — | 20/30 (67%) | 5.2 |
 | qwen3-coder-30b | — | — | — | — | 14/29 (48%) | 2.1 |
-| gemma4-26b | — | — | — | — | 16/24 (67%) | 5.2 |
 | qwen3.5-0.8b | 3/17 (18%) | 0.2 | — | — | — | — |
 | k2-horizon-7b-q4 | — | — | 5/13 (38%) | 0.7 | — | — |
 | bonsai-2-9b | — | — | 2/5 (40%) | 1.0 | — | — |
@@ -104,4 +104,4 @@ the files the model wrote; time = wall-clock minutes per episode.
 **How this was built**: the code was written by AI coding agents (Claude, ChatGPT/Codex) under my direction; the
 task ladder, the method, the decisions and the conclusions are mine.
 
-Updated hourly while runs are active. Last update: 2026-11-02 04:00 UTC.
+Updated hourly while runs are active. Last update: 2026-11-02 05:00 UTC.
