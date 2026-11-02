@@ -91,8 +91,8 @@ the files the model wrote; time = wall-clock minutes per episode.
 | north-mini-code | — | — | — | — | 8/12 (67%) | 8.1 |
 | qwen3.6-35b | — | — | — | — | 11/11 (100%) | 1.5 |
 | nemotron-cascade-2-30b | — | — | — | — | 4/10 (40%) | 5.5 |
+| ornith-1.5-35b | — | — | — | — | 10/10 (100%) | 4.0 |
 | flint-40b | — | — | — | — | 5/6 (83%) | 1.9 |
-| ornith-1.5-35b | — | — | — | — | 6/6 (100%) | 1.4 |
 | bonsai-2-9b | — | — | 2/5 (40%) | 1.0 | — | — |
 | k2-horizon-7b-q8 | — | — | 4/5 (80%) | 2.2 | — | — |
 | devstral-24b | — | — | — | — | 1/4 (25%) | 23.1 |
@@ -110,4 +110,4 @@ the files the model wrote; time = wall-clock minutes per episode.
 **How this was built**: the code was written by AI coding agents (Claude, ChatGPT/Codex) under my direction; the
 task ladder, the method, the decisions and the conclusions are mine.
 
-Updated hourly while runs are active. Last update: 2026-11-02 11:00 UTC.
+Updated hourly while runs are active. Last update: 2026-11-02 12:00 UTC.

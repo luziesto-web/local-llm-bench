@@ -106,7 +106,7 @@ if __name__ == "__main__":
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--start", action="store_true", help="required to actually run (owner go-ahead)")
     ap.add_argument("--resume", action="store_true", help="continue an interrupted run of the same name")
-    ap.add_argument("--hours", type=float, default=12.0)
+    ap.add_argument("--hours", type=float, help="deadline in hours; with --resume it sets a new deadline")
     ap.add_argument("--models", help="comma-separated model keys (default: the six MoE models)")
     a = ap.parse_args()
     assert z.runner.LEVELS["high"]["seconds"] == 720
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     if z.runner.api("ps").get("models"):
         raise SystemExit("Ollama has a model loaded (another run?); wait for it to finish.")
     try:
-        sys.exit(z.run(argparse.Namespace(name=NAME, hours=a.hours, new_deadline=not a.resume, models=None, profile="all",
+        sys.exit(z.run(argparse.Namespace(name=NAME, hours=a.hours or 12.0, new_deadline=a.hours is not None or not a.resume, models=None, profile="all",
                                           levels=["high"])))
     finally:
         for k in ACTIVE:
