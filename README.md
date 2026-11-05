@@ -86,9 +86,9 @@ the files the model wrote; time = wall-clock minutes per episode.
 | laguna-xs-2.1 | — | — | — | — | 23/36 (64%) | 2.0 |
 | gemma4-26b | — | — | — | — | 20/30 (67%) | 5.2 |
 | qwen3-coder-30b | — | — | — | — | 14/29 (48%) | 2.1 |
-| qwen3.6-35b | — | — | — | — | 19/26 (73%) | 2.3 |
+| qwen3.6-35b | — | — | — | — | 20/28 (71%) | 2.4 |
+| ornith-1.5-35b | — | — | — | — | 17/24 (71%) | 4.6 |
 | flint-40b | — | — | — | — | 12/18 (67%) | 2.8 |
-| ornith-1.5-35b | — | — | — | — | 13/17 (76%) | 4.6 |
 | qwen3.5-0.8b | 3/17 (18%) | 0.2 | — | — | — | — |
 | k2-horizon-7b-q4 | — | — | 5/13 (38%) | 0.7 | — | — |
 | north-mini-code | — | — | — | — | 8/12 (67%) | 8.1 |
@@ -110,4 +110,4 @@ the files the model wrote; time = wall-clock minutes per episode.
 **How this was built**: the code was written by AI coding agents (Claude, ChatGPT/Codex) under my direction; the
 task ladder, the method, the decisions and the conclusions are mine.
 
-Updated hourly while runs are active. Last update: 2026-11-05 08:00 UTC.
+Updated hourly while runs are active. Last update: 2026-11-05 09:00 UTC.
