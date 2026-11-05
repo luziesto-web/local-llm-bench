@@ -59,7 +59,7 @@ MODELS = {  # key: (tag, [(config_id, think, sampling)])  think None = no think 
                                               ("nt-vendor", False, {"temperature": 1.0, "top_p": 0.95, "top_k": 64}),
                                               ("th-vendor-syshint", True, {"temperature": 1.0, "top_p": 0.95, "top_k": 64})]),
 }
-DEFAULT = ["qwen3.6-35b", "laguna-xs-2.1", "north-mini-code", "nemotron-cascade-2-30b", "flint-40b", "ornith-1.5-35b"]  # fastest first (passport 2026-11-02)
+DEFAULT = ["laguna-xs-2.1", "north-mini-code", "nemotron-cascade-2-30b", "flint-40b", "ornith-1.5-35b", "qwen3.6-35b"]  # owner 2026-11-05: Qwen3.6 last (both test-time crashes were on it)
 TASKS = ("H0", "H3", "H8")
 ROUND2 = ("H1", "H2", "H4", "H6", "H7", "H9")    # same hard tasks and seed as zoo-high-round2-20261029
 SEED = 11
