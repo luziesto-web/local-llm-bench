@@ -79,16 +79,16 @@ the files the model wrote; time = wall-clock minutes per episode.
 | granite4.2-3b | 64/103 (62%) | 0.5 | — | — | — | — |
 | gemma4-e2b | 25/92 (27%) | 0.2 | — | — | — | — |
 | granite4.2-8b | — | — | 50/88 (57%) | 1.0 | — | — |
-| gemma4-12b | — | — | — | — | 41/81 (51%) | 6.8 |
+| gemma4-12b | — | — | — | — | 43/84 (51%) | 7.4 |
 | gpt-oss-20b | 3/8 (38%) | 1.6 | 3/8 (38%) | 1.6 | 40/53 (75%) | 3.3 |
 | nemotron-3.5-lightning-30b | — | — | — | — | 34/58 (59%) | 5.7 |
 | glm-4.7-flash | — | — | — | — | 22/51 (43%) | 2.4 |
 | laguna-xs-2.1 | — | — | — | — | 23/36 (64%) | 2.0 |
+| qwen3.6-35b | — | — | — | — | 21/31 (68%) | 2.3 |
 | gemma4-26b | — | — | — | — | 20/30 (67%) | 5.2 |
 | qwen3-coder-30b | — | — | — | — | 14/29 (48%) | 2.1 |
-| qwen3.6-35b | — | — | — | — | 20/28 (71%) | 2.4 |
+| flint-40b | — | — | — | — | 14/24 (58%) | 3.4 |
 | ornith-1.5-35b | — | — | — | — | 17/24 (71%) | 4.6 |
-| flint-40b | — | — | — | — | 12/18 (67%) | 2.8 |
 | qwen3.5-0.8b | 3/17 (18%) | 0.2 | — | — | — | — |
 | k2-horizon-7b-q4 | — | — | 5/13 (38%) | 0.7 | — | — |
 | north-mini-code | — | — | — | — | 8/12 (67%) | 8.1 |
@@ -110,4 +110,4 @@ the files the model wrote; time = wall-clock minutes per episode.
 **How this was built**: the code was written by AI coding agents (Claude, ChatGPT/Codex) under my direction; the
 task ladder, the method, the decisions and the conclusions are mine.
 
-Updated hourly while runs are active. Last update: 2026-11-06 06:00 UTC.
+Updated hourly while runs are active. Last update: 2026-11-06 07:00 UTC.
