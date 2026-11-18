@@ -81,7 +81,8 @@
     gap: 8px 14px;
     margin-top: 6px;
   }
-  .tabs { display: flex; gap: 5px; align-items: center; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  
   .tab {
     background: transparent;
     border: 1px solid var(--line);
@@ -477,6 +478,7 @@
       <button type="button" class="tab" data-category="contest">Конкурсы<span class="tab-count" id="tab-contest-count"></span><span class="tab-dot hidden" id="tab-contest-dot">⏳</span></button>
       <button type="button" class="tab" data-category="test">Тесты моделей<span class="tab-count" id="tab-test-count"></span><span class="tab-dot hidden" id="tab-test-dot">⏳</span></button>
       <button type="button" class="tab" data-category="conclusions">Выводы<span class="tab-count" id="tab-conclusions-count"></span></button>
+      
     </div>
     <div class="head-right">
       <label class="check">
@@ -498,6 +500,7 @@
   </section>
   <div id="groups"></div>
   <section id="conclusions" hidden></section>
+  
   <aside id="detail-panel" class="hidden"><div class="detail-head"><span class="h"></span>
     <button class="x" type="button" data-close title="Закрыть (Esc)">×</button></div><div class="detail-body"></div></aside>
   <div id="old-benchmarks">
@@ -644,7 +647,7 @@ let treeState = loadObject(TREE_KEY);
 let selectedCategory = null;
 try {
   const stored = localStorage.getItem(CATEGORY_KEY);
-  if (stored === "contest" || stored === "test" || stored === "conclusions") selectedCategory = stored;
+  if (stored === "contest" || stored === "test" || stored === "conclusions" || (stored === "arena" && document.getElementById("arena"))) selectedCategory = stored;
 } catch (err) {}
 let showService = false;
 try { showService = localStorage.getItem(SERVICE_KEY) === "1"; } catch (err) {}
@@ -790,7 +793,7 @@ function groupsFor(state, category) {
 }
 
 function pickCategory(state) {
-  if (selectedCategory === "contest" || selectedCategory === "test" || selectedCategory === "conclusions") return selectedCategory;
+  if (selectedCategory === "contest" || selectedCategory === "test" || selectedCategory === "conclusions" || (selectedCategory === "arena" && document.getElementById("arena"))) return selectedCategory;
   const live = visibleGroups(state).filter(function (c) { return c.live; })[0];
   if (live) return live.category;
   const contest = groupsFor(state, "contest");
@@ -1667,12 +1670,13 @@ function render(state, preserve) {
   updateTabs(state);
 
   const showConclusions = selectedCategory === "conclusions";
-  document.getElementById("groups").hidden = showConclusions;
+  
+  document.getElementById("groups").hidden = showConclusions || selectedCategory === "arena";
   document.getElementById("conclusions").hidden = !showConclusions;
   const cc = state.conclusions || {models: []};
   document.getElementById("tab-conclusions-count").textContent = " (" + cc.models.filter(function (m) { return m.verdict; }).length + ")";
   if (showConclusions) renderConclusions(cc);
-  const groups = showConclusions ? [] : groupsFor(state, selectedCategory);
+  const groups = showConclusions || selectedCategory === "arena" ? [] : groupsFor(state, selectedCategory);
   const emptyGroupText = selectedCategory === "contest"
     ? "Нет конкурсов за последние 24 часа."
     : "Нет тестов моделей за последние 24 часа.";
@@ -1790,11 +1794,13 @@ document.addEventListener("click", function (event) {
   }
 });
 
+
+
 document.getElementById("tabs").addEventListener("click", function (event) {
   const button = event.target.closest(".tab");
   if (!button) return;
   const category = button.getAttribute("data-category");
-  if (category !== "contest" && category !== "test" && category !== "conclusions") return;
+  if (category !== "contest" && category !== "test" && category !== "conclusions" && category !== "arena") return;
   selectedCategory = category;
   try { localStorage.setItem(CATEGORY_KEY, category); } catch (err) {}
   if (lastState) render(lastState, true);
