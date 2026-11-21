@@ -19,7 +19,10 @@ MODELS={'granite':'granite3.3:8b','gemma':'gemma4:e4b-t',
         'ministral':'ministral-3:8b-t','qwen4b':'qwen3.5:4b-t',
         'qwen9b':'qwen3.5:9b-t','k2q5':'k2-horizon:7b-q5-t',
         'k2q8':'k2-horizon:7b-q8-t','gptoss':'gpt-oss:20b',
-        'qwythos':'hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:Q8_0'}
+        'qwythos':'hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:Q8_0',
+        'qwythosq4':'qwythos:9b-q4km-text'}
+# Qwen3.5 official thinking-coding preset, as zoo-spec-20261026/zoo_test_spec.py "th-coding" (Qwen 9B Medium 7/10).
+SAMPLING_PRESETS={'th-coding':dict(temperature=0.6,top_p=0.95,top_k=20,min_p=0.0,presence_penalty=0.0,repeat_penalty=1.0)}
 LEVELS={
     'light':dict(cases=['L0','L2','L3','L4','L5'],calls=12,seconds=300,num_ctx=8192,num_predict=2048,
                  models=['granite','gemma','ministral','qwen4b']),
@@ -230,9 +233,12 @@ def preflight(selected, output, level='light', overrides=None, reasoning='auto')
         runner_hash=digest(Path(__file__).read_text(encoding='utf-8')),
         worker_hash=digest((BASE/'light_worker.py').read_text(encoding='utf-8')),
         cases_hash=digest((BASE/'cases.py').read_text(encoding='utf-8')),
-        config_id=f"{level}-{options['num_ctx']}ctx-{options['num_predict']}out-{reasoning}",
+        config_id=f"{level}-{options['num_ctx']}ctx-{options['num_predict']}out-{reasoning}"+''.join(
+            f'-{n}' for n,s in SAMPLING_PRESETS.items() if all(options.get(k)==v for k,v in s.items())),
         limits=dict(calls=spec['calls'],seconds=spec['seconds']),options=options,
-        sampling='common controlled profile; not official per-model optimum',
+        sampling=next((f'vendor preset {n}' for n,s in SAMPLING_PRESETS.items()
+                       if all(options.get(k)==v for k,v in s.items())),
+                      'common controlled profile; not official per-model optimum'),
         runtime='restricted Python subset; not an OS security sandbox')
     (output/'configuration.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     return result
@@ -400,9 +406,12 @@ def main(default_level='light'):
     p.add_argument('--num-ctx',type=int)
     p.add_argument('--num-predict',type=int)
     p.add_argument('--seed',type=int,default=42)
+    p.add_argument('--sampling',choices=sorted(SAMPLING_PRESETS),
+                   help='vendor sampling preset instead of the common T0.3 profile (Claude 2026-11-21)')
     args=p.parse_args()
     args.models=args.models or LEVELS[args.level]['models']
     overrides={'seed':args.seed}
+    if args.sampling: overrides.update(SAMPLING_PRESETS[args.sampling])
     for field,value in [('num_ctx',args.num_ctx),('num_predict',args.num_predict)]:
         if value is not None:
             if value<=0: p.error(f'{field} must be positive')
