@@ -18,7 +18,8 @@ from suite import BASE, RUNS, CASES, prepare, digest
 MODELS={'granite':'granite3.3:8b','gemma':'gemma4:e4b-t',
         'ministral':'ministral-3:8b-t','qwen4b':'qwen3.5:4b-t',
         'qwen9b':'qwen3.5:9b-t','k2q5':'k2-horizon:7b-q5-t',
-        'k2q8':'k2-horizon:7b-q8-t','gptoss':'gpt-oss:20b'}
+        'k2q8':'k2-horizon:7b-q8-t','gptoss':'gpt-oss:20b',
+        'qwythos':'hf.co/empero-ai/Qwythos-9B-Claude-Mythos-5-1M-GGUF:Q8_0'}
 LEVELS={
     'light':dict(cases=['L0','L2','L3','L4','L5'],calls=12,seconds=300,num_ctx=8192,num_predict=2048,
                  models=['granite','gemma','ministral','qwen4b']),
