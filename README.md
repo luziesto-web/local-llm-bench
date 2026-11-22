@@ -95,8 +95,8 @@ the files the model wrote; time = wall-clock minutes per episode.
 | nemotron-cascade-2-30b | — | — | — | — | 4/10 (40%) | 5.5 |
 | bonsai-2-9b | — | — | 2/5 (40%) | 1.0 | — | — |
 | k2-horizon-7b-q8 | — | — | 4/5 (80%) | 2.2 | — | — |
+| qwythos-9b-q4 | — | — | — | — | 0/4 (0%) | 12.0 |
 | devstral-24b | — | — | — | — | 1/4 (25%) | 23.1 |
-| qwythos-9b-q4 | — | — | — | — | 0/2 (0%) | 12.0 |
 
 - **Ladder of task levels**: Light (L0-L11) -> Medium (M1-M5) -> High (H0-H9) -> qualification -> Mastermind;
   every task has hidden checks run on the files the model wrote (`cases.py`, `light10_cases.py`).
@@ -111,4 +111,4 @@ the files the model wrote; time = wall-clock minutes per episode.
 **How this was built**: the code was written by AI coding agents (Claude, ChatGPT/Codex) under my direction; the
 task ladder, the method, the decisions and the conclusions are mine.
 
-Updated hourly while runs are active. Last update: 2026-11-22 13:00 UTC.
+Updated hourly while runs are active. Last update: 2026-11-22 14:00 UTC.
